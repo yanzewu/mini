@@ -1,0 +1,126 @@
+
+# Pre-definitions
+
+import std;
+123;
+let multiply:function(int, int, int) = @muli;
+let add:function(int, int, int) = @addi;
+let negate:function(int, int) = @negi;
+let pass:function(nil) = \()->{nil}:nil;
+let append:function(array(int), int, array(int));
+let print:function(int, nil);
+
+#def if_action(sel:int, choices:tuple(function(nil), function(nil)))->nil{
+#    @index<function(nil)>(sel, choice)()
+#}
+#def copy_array_aux(src:array(int), dst:array(int), j:int, size:int)->nil {
+#    if_action(@less(j, size), (
+#        \()->copy_array_aux(src, dst, @add(j, 1), size),
+#        pass
+#    ))
+#}
+#def copy_array(src:array(int), dst:array(int), size:int)->nil {
+#    copy_array_aux(src, dst, 0, size)
+#}
+#def append(arr:array(int), val:int)->array(int){
+#    let arr2 = @arrayi(@add(@len(arr), 1)),
+#    copy_array(arr1, arr2, @len(arr1)),
+#    @setindex(arr2, @add(@len(arr), 1), val),
+#    arr2
+#}
+#def printf(fmt:array(char), src:array(object))->nil {
+#    @print(@format(fmt, src))
+#}
+
+let v1:int;
+let v2:int = 10;
+let v2_2:int = (10);
+let v3:float = 10.23;
+let v4:char = '1';
+let v4_2:char = '\n';
+let v4_3:char = ' ';
+let v5:bool = true;
+let v8:function(int, array(int), array(int)) =
+    \(a:int, l:array(int))->append(l, a):array(int)
+;
+let v8_2:function(int, array(int), array(int)) =
+    \(a:int, l:array(int))->{
+        let b:int = add(a, 2),
+        append(l, b)
+    }:array(int)
+;
+
+let v9:int = add(2,3);
+let v9_2:int = add(v9, 3);
+let v10:function(int, array(int), array(int)) = v8;
+let v12:array(int) = [1,2,3];
+let v12_2:array(int) = [1,multiply(v2, 2), add(3, 5)];
+let v12_3:array(int) = [1];
+let v12_4:array(int) = [];
+let v12_5:array(array(int)) = [[1]];
+let v13:nil = nil;
+
+# function definition
+
+def f1(a:int, b:int)->int {
+    add(a, b),
+    add(add(a, b), add(a, b)),
+    negate(add(a, b)),
+    a,
+    (a, b),
+    ((a), b),
+    1,
+    add(a, b),
+    set a = 5,
+    set a = add(a, b),
+    let d:int = add(a, b),
+    print(a),
+    a
+};
+
+def f2(a:int, b:int)->nil {
+    nil
+};
+
+def f3()->int {
+    2
+};
+
+def f4()->int {
+    def nested_f1(a:int, b:int)->int {
+        add(a, b),
+        add(add(a, b), add(a, b)),
+        negate(add(a, b)),
+        a,
+        (a, b),
+        ((a), b),
+        1,
+        add(a, b),
+        set a = 5,
+        set a = add(a, b),
+        let c:int = add(a, b),
+        print(a),
+        a
+    },
+    let nested_v1:int,
+    let nested_v2:int = 10,
+    let nested_v3:float = 10.23,
+    let nested_v4:char = '1',
+    let nested_v4_2:char = '\n',
+    let nested_v4_3:char = ' ',
+    let nested_v5:bool = true,
+    let nested_v8:function(int, array(int), array(int)) =
+        \(a:int, l:array(int))->append(l, a):array(int)
+    ,
+    let nested_v8_2:function(int, array(int), array(int)) =
+        \(a:int, l:array(int))->{
+            let b:int = add(a, 2),
+            let c:int = nested_v2,
+            append(l, b)
+        }:array(int)
+    ,
+    let v9:int = add(2,3),
+    let v9_2:int = add(v9, 3),
+    let v10:function(int, array(int), array(int)) = v8,
+    1
+};

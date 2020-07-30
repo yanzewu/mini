@@ -1,0 +1,21 @@
+# Visual studio
+
+x64/
+Debug/
+Release/
+.vs/
+*.user
+*.suo
+*.sln
+
+# VSCode
+
+.vscode/
+
+# Others
+
+archive/
+techdoc/
+*.out
+*.exe
+test-*

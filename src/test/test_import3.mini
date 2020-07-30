@@ -1,0 +1,6 @@
+
+
+import test_import2;
+import test_import1;
+
+let a3:int;

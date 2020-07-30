@@ -1,0 +1,25 @@
+
+let a0:int = 10;
+
+import test_import2;
+
+let a1:int = 10;
+
+def f2(a1:int, b1:int)->int {
+
+    let a2:int = 5,
+    def f3(b1:int)->int {
+        a0,
+        a1,
+        a2,
+        b1
+    },
+
+    a0,
+    a1,
+    a2,
+    b1,
+    f3(b1)
+};
+
+let a4:int = f2(a0, a1);
