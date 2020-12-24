@@ -24,6 +24,7 @@ const std::unordered_map<char, Keyword> Lexer::operator_map = {
 
 const std::unordered_map<std::string, Keyword> Lexer::keyword_map = {
     {"->", ARROW},
+    {"forall", FORALL},
     {"import", IMPORT},
     {"let", LET},
     {"def", DEF},
@@ -58,6 +59,7 @@ const std::unordered_map<Keyword, std::string> symbol_backmap = {
     {BACKSLASH, "\\"},
     {DOT, "."},
     {ARROW, "->"},
+    {FORALL, "forall"},
     {IMPORT, "import"},
     {LET, "let"},
     {DEF, "def"},

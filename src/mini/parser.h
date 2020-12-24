@@ -104,6 +104,8 @@ namespace mini {
 
         Ptr<LetNode> parse_func_def_wb();
 
+        void parse_quantifier_def_wb(std::vector <std::pair<pSymbol, Ptr<TypeNode>>>& args);
+
         void parse_statement_list(std::vector<Ptr<AST>>& statements);
 
         Ptr<ClassNode> parse_class_wb();

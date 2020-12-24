@@ -41,6 +41,12 @@ Ptr<SetNode> mini::Parser::parse_set_wb() {
 Ptr<TypeNode> mini::Parser::parse_type() {
 
     auto m_node = std::make_shared<TypeNode>();
+    if (test_keyword_inc(Keyword::FORALL)) {
+        match_keyword_inc(Keyword::LANGLE);
+        parse_quantifier_def_wb(m_node->quantifiers);
+        match_keyword_inc(Keyword::DOT);
+    }
+    // special case: nil is simutaneously a type name and constant name
     if (test_token(Token::CONSTANT) && std::get<Constant>(cur_token->value).get_type() == Constant::Type_t::NIL) {
         m_node->symbol = std::make_shared<Symbol>("nil", cur_token->get_info());
         m_node->set_info(cur_token->get_info());
@@ -148,6 +154,21 @@ Ptr<ExprNode> mini::Parser::parse_expr() {
             }
             std::static_pointer_cast<ExprNode>(m_node).swap(prefix);    // set prefix to be the lhs
         }
+        else if (test_keyword_inc(Keyword::LANGLE)) {
+            auto m_node = std::make_shared<TypeApplNode>();
+            m_node->set_info(get_last_info());
+            m_node->lhs = prefix;
+
+            while (1) {
+                m_node->args.push_back(parse_type());
+                if (test_keyword_inc(Keyword::COMMA)) continue;
+                else if (test_keyword_inc(Keyword::RANGLE)) break;
+                else {
+                    throw_cur_token("`,' or `>' expected");
+                }
+            }
+            std::static_pointer_cast<ExprNode>(m_node).swap(prefix);
+        }
         else if (test_keyword_inc(Keyword::DOT)) {
             auto m_node = std::make_shared<GetFieldNode>();
             m_node->lhs = prefix;
@@ -204,6 +225,10 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb() {
     auto m_node = std::make_shared<LambdaNode>();
     m_node->set_info(get_last_info());
 
+    if (test_keyword_inc(Keyword::LANGLE)) {
+        parse_quantifier_def_wb(m_node->quantifiers);
+    }
+
     if (test_token(Token::ID)) {
         auto name = get_id_inc();
         match_keyword_inc(Keyword::COLON);
@@ -255,8 +280,10 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb() {
     else {
         m_node->statements.push_back(parse_expr());
     }
-    match_keyword_inc(Keyword::COLON);
-    m_node->ret_type = parse_type();
+
+    if (test_keyword_inc(Keyword::COLON)) { // greedy match
+        m_node->ret_type = parse_type();
+    }
 
     return m_node;
 }
@@ -273,6 +300,11 @@ Ptr<LetNode> mini::Parser::parse_func_def_wb() {
     m_node->set_info(get_last_info());
     m_funnode->set_info(get_last_info());
     m_typenode->set_info(get_last_info());
+
+    if (test_keyword_inc(Keyword::LANGLE)) {
+        parse_quantifier_def_wb(m_funnode->quantifiers);
+        m_typenode->quantifiers = m_funnode->quantifiers;
+    }
 
     match_keyword_inc(Keyword::LBRACKET);
     if (!test_keyword_inc(Keyword::RBRACKET)) {
@@ -291,9 +323,14 @@ Ptr<LetNode> mini::Parser::parse_func_def_wb() {
             }
         }
     }
-    match_keyword_inc(Keyword::ARROW);
-    m_funnode->ret_type = parse_type();
-    m_typenode->args.push_back(m_funnode->ret_type);
+
+    if (test_keyword_inc(Keyword::ARROW)) {
+        m_funnode->ret_type = parse_type();
+        m_typenode->args.push_back(m_funnode->ret_type);
+    }
+    else {
+        m_typenode->args.push_back(NULL);   // to be inferred
+    }
     m_node->vtype = m_typenode;
 
     match_keyword_inc(Keyword::LCURLY);
@@ -302,6 +339,26 @@ Ptr<LetNode> mini::Parser::parse_func_def_wb() {
     m_node->expr = m_funnode;
 
     return m_node;
+}
+
+void mini::Parser::parse_quantifier_def_wb(std::vector<std::pair<pSymbol, Ptr<TypeNode>>>& args) {
+    while (1) {
+        auto arg_name = get_id_inc();
+        Ptr<TypeNode> arg_type;
+        if (test_keyword_inc(Keyword::IMPLEMENTS)) {
+            arg_type = parse_type();
+        }
+        else {
+            arg_type = std::make_shared<TypeNode>(std::make_shared<Symbol>("top", cur_token->get_info()));
+        }
+        args.push_back({ arg_name, arg_type });
+
+        if (test_keyword_inc(Keyword::RANGLE)) break;
+        else if (test_keyword_inc(Keyword::COMMA)) continue;
+        else {
+            throw_cur_token("`,' or `>' expected");
+        }
+    }
 }
 
 void mini::Parser::parse_statement_list(std::vector<Ptr<AST>>& statements) {
@@ -373,6 +430,12 @@ Ptr<ClassNode> mini::Parser::parse_class_wb() {
 
 Ptr<InterfaceNode> mini::Parser::parse_interface_wb() {
     auto m_node = std::make_shared<InterfaceNode>(get_id_inc());
+    if (test_keyword_inc(Keyword::EXTENDS)) {
+        do {
+            m_node->parents.push_back(get_id_inc());
+        } while (test_keyword_inc(Keyword::COMMA));
+    }
+
     match_keyword_inc(Keyword::LCURLY);
     if (!test_keyword(Keyword::RCURLY)) {
         while (1) {

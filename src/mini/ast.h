@@ -22,9 +22,10 @@ namespace mini {
             STRUCT,
             ARRAY,
             LAMBDA,
-            FUNCALL,
+            FUNCALL,    // term->term
             GETFIELD,
-            TYPE,       // type expression
+            TYPE,       // type->type
+            TYPEAPPL,   // type->term
             LET,
             SET,
             CLASS,      // class definition
@@ -60,7 +61,7 @@ namespace mini {
 
         template<typename T>
         const T* as()const {
-            static_assert(std::is_base_of<AST, T>::value, "AST-derived type required");
+            static_assert(std::is_base_of<AST, T>::value, "Proper type required in casting");
             return static_cast<const T*>(this);
         }
 
@@ -223,15 +224,18 @@ namespace mini {
         void print(OutputStream& os, unsigned indent)const;
     };
 
-
     // type and aggregation type
     class TypeNode : public AST {
     public:
 
-        // type table ref. (notice currently there are only a global type table)
-        // but will be multiple if scope is included.
+        /* Represents two kinds of TypeNodes:
+            Type constructor node: psymbol(args)
+            Universal type node: forall<quantifiers>.child
+        */
+
         pSymbol symbol;
         std::vector<Ptr<TypeNode>> args;
+        std::vector<std::pair<pSymbol, Ptr<TypeNode>>> quantifiers;
 
         pType prog_type;
 
@@ -244,11 +248,24 @@ namespace mini {
         void print(OutputStream& os, unsigned indent)const;
     };
 
+    class TypeApplNode : public ExprNode {
+    public:
+        Ptr<ExprNode> lhs;
+        std::vector<Ptr<TypeNode>> args;
+
+        pType prog_type;
+
+        TypeApplNode() : ExprNode(AST::Type_t::TYPEAPPL), lhs(NULL) {}
+
+        void print(OutputStream& os, unsigned indent)const;
+    };
+
     // lambda instance
     class LambdaNode : public ExprNode {
     public:
 
-        Ptr<TypeNode> ret_type; // return type
+        Ptr<TypeNode> ret_type; // return type (null if omitted)
+        std::vector<std::pair<pSymbol, Ptr<TypeNode>>> quantifiers;
         std::vector<std::pair<pSymbol, Ptr<TypeNode>>> args;
         std::vector<Ptr<AST>> statements;
 
@@ -330,6 +347,7 @@ namespace mini {
     public:
         pSymbol symbol;
         std::vector<Ptr<LetNode>> members;
+        std::vector<pSymbol> parents;
 
         InterfaceNode() : CommandNode(AST::Type_t::INTERFACE) {}
         explicit InterfaceNode(const pSymbol& symbol) : CommandNode(AST::INTERFACE), symbol(symbol) {}

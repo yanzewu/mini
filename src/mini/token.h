@@ -31,6 +31,8 @@ namespace mini {
         DOT = 23,
         DASH = 24,
 
+        FORALL = 30,
+
         IMPORT = 100,
         LET = 101,
         DEF = 102,
@@ -40,7 +42,7 @@ namespace mini {
 
         IMPLEMENTS = 110,
         EXTENDS = 111,
-        STATIC = 113
+        STATIC = 113,
 
     };
 

@@ -26,6 +26,8 @@ void test_parser() {
     PARSE("import a; ; ; "); REQUIRE(ast[0]->as<ImportNode>()->get_filename() == "a", s.c_str());
     PARSE("import a.b.c.d;"); REQUIRE(ast[0]->as<ImportNode>()->get_filename() == "a/b/c/d", s.c_str());
 
+    // Literals
+
     PARSE("let v1:int;"); REQUIRE(ast_cast<LetNode>(ast[0])->symbol->get_name() == "v1", s.c_str());
                         REQUIRE(ast_cast<LetNode>(ast[0])->vtype->symbol->get_name() == "int", s.c_str());
     PARSE("let v2:int = 10;"); REQUIRE(ast_cast<ConstantNode>(ast_cast<LetNode>(ast[0])->expr)->value == Constant(10), s.c_str());
@@ -86,6 +88,9 @@ void test_parser() {
         REQUIRE(ast[0]->as<FunCallNode>()->caller->as<FunCallNode>()->args[0]->as<ArrayNode>()->children[1]->as<LambdaNode>()->statements[0]->
             as<FunCallNode>()->caller->as<VarNode>()->symbol->get_name() == "sub", s.c_str());
     PARSE("set e2 = e3;"); REQUIRE(ast[0]->as<SetNode>()->lhs->as<VarNode>()->symbol->get_name() == "e2", s.c_str());
+
+    // GetField
+
     PARSE("obj.method(1,2)(3,4)((5,6));");
         REQUIRE(ast[0]->as<FunCallNode>()->args[0]->as<TupleNode>()->children[1]->as<ConstantNode>()->value == Constant(6), s.c_str());
         REQUIRE(ast[0]->as<FunCallNode>()->caller->as<FunCallNode>()->args[1]->as<ConstantNode>()->value == Constant(4), s.c_str());
@@ -110,6 +115,8 @@ void test_parser() {
         REQUIRE(ast[0]->as<SetNode>()->lhs->as<GetFieldNode>()->lhs->as<FunCallNode>()->caller->as<GetFieldNode>()->lhs->as<StructNode>()->children[1].second->as<VarNode>()
             ->symbol->get_name() == "m2", s.c_str());
 
+    // Lambda and Functions
+
     PARSE("\\x:int->x:int;");
         REQUIRE(ast_cast<LambdaNode>(ast[0])->args[0].first->get_name() == "x", s.c_str());
         REQUIRE(ast_cast<TypeNode>(ast_cast<LambdaNode>(ast[0])->args[0].second)->symbol->get_name() == "int", s.c_str());
@@ -129,12 +136,13 @@ void test_parser() {
         REQUIRE(ast_cast<LambdaNode>(ast[0])->statements.size() == 2, s.c_str());
     PARSE("\\(a:int, b:int)->{a=a, b=b}:object;");
         REQUIRE(ast_cast<StructNode>(ast_cast<LambdaNode>(ast[0])->statements[0])->children.size() == 2, s.c_str());
-    PARSE("def f2(a:int, b:int)->int {let f2_l1:function(int, int)=\\x:int->x:int, def f2_f1(a:int, b:int)->int {add(a,b)}, 1};");
+    PARSE("def f2<T implements Q>(a:int, b:int)->int {let f2_l1:function(int, int)=\\x:int->x:int, def f2_f1(a:int, b:int)->int {add(a,b)}, 1};");
         REQUIRE(ast_cast<LetNode>(ast[0])->symbol->get_name() == "f2", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast[0])->vtype->symbol->get_name() == "function", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast[0])->vtype->args[0]->symbol->get_name() == "int", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast[0])->vtype->args[1]->symbol->get_name() == "int", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast[0])->vtype->args[2]->symbol->get_name() == "int", s.c_str());
+        REQUIRE(ast_cast<LetNode>(ast[0])->vtype->quantifiers[0].second->symbol->get_name() == "Q", s.c_str());
         REQUIRE(ast_cast<LambdaNode>(ast_cast<LetNode>(ast[0])->expr)->args.size() == 2, s.c_str());
         REQUIRE(ast_cast<LambdaNode>(ast_cast<LetNode>(ast[0])->expr)->args[0].first->get_name() == "a", s.c_str());
         REQUIRE(ast_cast<LambdaNode>(ast_cast<LetNode>(ast[0])->expr)->args[0].second->symbol->get_name() == "int", s.c_str());
@@ -143,9 +151,34 @@ void test_parser() {
         REQUIRE(ast_cast<LetNode>(ast_cast<LambdaNode>(ast_cast<LetNode>(ast[0])->expr)->statements[1])->symbol->get_name() == "f2_f1", s.c_str());
         REQUIRE(ast_cast<LambdaNode>(ast_cast<LetNode>(ast_cast<LambdaNode>(ast_cast<LetNode>(ast[0])->expr)->statements[1])->expr)->ret_type->symbol->get_name() == "int", s.c_str());
 
-    PARSE("interface I1 {a:int, b:array(char)};"); REQUIRE(ast_cast<InterfaceNode>(ast[0])->symbol->get_name() == "I1", s.c_str());
+    // Interfaces
+
+    PARSE("interface I1 extends I2,I3 {a:int, b:array(char)};"); 
+        REQUIRE(ast_cast<InterfaceNode>(ast[0])->symbol->get_name() == "I1", s.c_str());
+        REQUIRE(ast[0]->as<InterfaceNode>()->parents[1]->get_name() == "I3", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast_cast<InterfaceNode>(ast[0])->members[0])->symbol->get_name() == "a", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast_cast<InterfaceNode>(ast[0])->members[1])->symbol->get_name() == "b", s.c_str());
+
+    // Generics
+
+    PARSE("let gv1:forall<T1 implements forall<T>.G(T), T2>.function(T1, T2, forall<X>.Y(X, T1));");
+        REQUIRE(ast[0]->as<LetNode>()->vtype->quantifiers[1].first->get_name() == "T2", s.c_str());
+        REQUIRE(ast[0]->as<LetNode>()->vtype->quantifiers[0].second->symbol->get_name() == "G", s.c_str());
+        REQUIRE(ast[0]->as<LetNode>()->vtype->quantifiers[0].second->quantifiers[0].first->get_name() == "T", s.c_str());
+        REQUIRE(ast[0]->as<LetNode>()->vtype->args[2]->quantifiers[0].first->get_name() == "X", s.c_str());
+        REQUIRE(ast[0]->as<LetNode>()->vtype->args[2]->symbol->get_name() == "Y", s.c_str());
+    PARSE("\\<T2 implements I2>(t2:T2)->\\<X>(x:X)->f<X,T2,int>(x, t2, 2);");
+        REQUIRE(ast[0]->as<LambdaNode>()->quantifiers[0].second->symbol->get_name() == "I2", s.c_str());
+        REQUIRE(ast[0]->as<LambdaNode>()->statements[0]->as<LambdaNode>()->quantifiers[0].first->get_name() == "X", s.c_str());
+        REQUIRE(ast[0]->as<LambdaNode>()->statements[0]->as<LambdaNode>()->statements[0]->as<FunCallNode>()->args[1]->as<VarNode>()->symbol->get_name() == "t2", s.c_str());
+        REQUIRE(ast[0]->as<LambdaNode>()->statements[0]->as<LambdaNode>()->statements[0]->as<FunCallNode>()->caller->as<TypeApplNode>()->args[2]->symbol->get_name() == "int", s.c_str());
+    PARSE("obj.method<T1,T2>(a<T3>, b)<T4>;");
+        REQUIRE(ast[0]->as<TypeApplNode>()->args[0]->symbol->get_name() == "T4", s.c_str());
+        REQUIRE(ast[0]->as<TypeApplNode>()->lhs->as<FunCallNode>()->args[0]->as<TypeApplNode>()->args[0]->symbol->get_name() == "T3", s.c_str());
+        REQUIRE(ast[0]->as<TypeApplNode>()->lhs->as<FunCallNode>()->caller->as<TypeApplNode>()->args[1]->symbol->get_name() == "T2", s.c_str());
+
+    // Classes
+
     PARSE("class C1 {m1:int,m2 : array(int) = [], static m3 : int, def m4(c : C1, a : int)->array(int) { append(c.m2, a)}}; ");
         REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[0].first)->symbol->get_name() == "m1", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[1].first)->symbol->get_name() == "m2", s.c_str());
