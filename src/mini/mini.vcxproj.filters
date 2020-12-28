@@ -122,5 +122,11 @@
     <ClInclude Include="builtin.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="typemetadata.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="typeaux.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

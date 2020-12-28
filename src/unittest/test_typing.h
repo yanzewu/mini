@@ -36,6 +36,7 @@ void test_typing() {
     REQUIRE(Type::compare(tb("bottom")().get(), tb("int")().get()) == Type::Ordering::LESS, "bottom < array(int)");
     REQUIRE(Type::compare(tb("int")().get(), tb("top")().get()) == Type::Ordering::LESS, "int <: top");
     REQUIRE(Type::compare(tb("top")().get(), tb("int")().get()) == Type::Ordering::GREATER, "top :> int");
+    REQUIRE(Type::compare(tb("list")().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::GREATER, "list :> struct(a=nil)");
     REQUIRE(Type::compare(tb("top")().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::GREATER, "top :> struct(a=nil)");
     REQUIRE(Type::compare(stb()().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::GREATER, "struct().get() > struct(a=nil)");
     REQUIRE(Type::compare(stb()("a", tb("int"))().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::UNCOMPARABLE,
@@ -53,11 +54,8 @@ void test_typing() {
     REQUIRE(stb()()->as<StructType>()->is_interface_of(stb()("a", tb("int"))().get()), "struct(a=int) <* struct()");
     REQUIRE(stb()("b", tb("float"))("a", stb()("x", tb("top")))()->as<StructType>()->is_interface_of(
         stb()("a", stb()("x", tb("int")))("b", tb("float"))().get()), "struct(a=int) <* struct()");
-    REQUIRE(tb("atomic")()->is_interface_of(tb("nil")().get()), "nil <* atomic");
-    REQUIRE(tb("atomic")()->is_interface_of(tb("nil")().get()), "int <* atomic");
-    REQUIRE(!tb("number")()->is_interface_of(tb("nil")().get()), "nil !<* number");
-    REQUIRE(tb("top")()->is_interface_of(stb()("a", tb("int"))().get()), "struct(a=int) <* top");
-    REQUIRE(tb("top")()->is_interface_of(utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable).get()), "forall<x>.function(x,x) <* top");
+    // REQUIRE(tb("top")()->is_interface_of(stb()("a", tb("int"))().get()), "struct(a=int) <* top");
+    // REQUIRE(tb("top")()->is_interface_of(utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable).get()), "forall<x>.function(x,x) <* top");
 
     // Universal Types
 
@@ -74,18 +72,18 @@ void test_typing() {
 
     // Evaluation
 
-    REQUIRE(utb()("x")("y", tb("atomic"))
+    /*REQUIRE(utb()("x")("y", tb("atomic"))
         (tb("function")(vtb("x"))(vtb("y"))(tb("tuple")(vtb("x"))(vtb("y")))).build(symtable)->as<UniversalType>()->instanitiate(
             { tb("int")(), tb("nil")() }, SymbolInfo())->equals(
                 tb("function")(tb("int"))(tb("nil"))(tb("tuple")("int")("nil"))().get()
             )
-        , "evaluate[forall<x,y implements atomic>.function(x,y,tuple(x,y))] with [x=int, y=nil] == function(int,nil,tuple(int,nil))");
-    REQUIRE(utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
+        , "evaluate[forall<x,y implements atomic>.function(x,y,tuple(x,y))] with [x=int, y=nil] == function(int,nil,tuple(int,nil))");*/
+    /*REQUIRE(utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
         { utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable) }, SymbolInfo())->equals(
             tb("function")
             (utb()("x")(tb("function")(vtb("x"))(vtb("x"))))
             (utb()("x")(tb("function")(vtb("x"))(vtb("x")))).build(symtable).get()
-        ), "evaluate[forall<x>.function(x,x)] with [x=forall<x>.function(x,x)] == function(forall<x>.function(x,x),forall<x>.function(x,x))");
+        ), "evaluate[forall<x>.function(x,x)] with [x=forall<x>.function(x,x)] == function(forall<x>.function(x,x),forall<x>.function(x,x))");*/
     REQUIRE(
         utb()("x", stb()("a", tb("int")))(tb("function")("int")(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
             { stb()("a", tb("int"))("b", tb("nil"))() }, SymbolInfo())->equals(
@@ -94,8 +92,8 @@ void test_typing() {
     );
     REQUIRE(utb()("x")(
         tb("function")(utb()("y")(tb("function")(vtb("x"))(vtb("y"))))(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
-            { tb("int")() }, SymbolInfo())->equals(
-                tb("function")(utb()("y")(tb("function")("int")(vtb("y"))))("int").build(symtable).get()
+            { stb()() }, SymbolInfo())->equals(
+                tb("function")(utb()("y")(tb("function")(stb())(vtb("y"))))(stb()).build(symtable).get()
             ), "evaluate[forall<x>.function(forall<y>.function(x,y),x)] with [x=int] == function(forall<y>.function(int,y),int)");
 
     summary();

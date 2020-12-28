@@ -55,7 +55,7 @@ void StructNode::print(OutputStream& os, unsigned indent)const {
     print_type(os);
     os << "\n";
     for (const auto& d : children) {
-        os.write_white(indent + 1) << *(d.first) << "= ";
+        os.write_white(indent + 1) << *(d.first) << "= \n";
         d.second->print(os, indent + 1);
     }
 };
@@ -85,18 +85,60 @@ void TypeNode::print(OutputStream& os, unsigned indent)const {
     }
     else {
         os << *symbol << "\n";
+        if (quantifiers.size() > 0) {
+            os.write_white(indent + 1) << "<";
+            for (const auto& q : quantifiers) {
+                os.write_white(indent + 1) << *q.first;
+                if (q.second) {
+                    os << ": \n";
+                    q.second->print(os, indent + 1);
+                }
+                else {
+                    os << "\n";
+                }
+            }
+            os.write_white(indent + 1) << ">";
+        }
         for (const auto& a : args) {
             a->print(os, indent + 1);
         }
     }
 };
 
+void TypeApplNode::print(OutputStream& os, unsigned indent) const {
+    os.write_white(indent) << "TypeAppl ";
+
+    print_type(os);
+    os << "\n";
+
+    lhs->print(os, indent + 1);
+    os << '\n';
+    for (const auto& a : args) {
+        a->print(os, indent + 1);
+        os << '\n';
+    }
+}
+
 void LambdaNode::print(OutputStream& os, unsigned indent)const {
     os.write_white(indent) << "Lambda ";
     print_type(os);
     os << "\n";
+    if (quantifiers.size() > 0) {
+        os.write_white(indent + 1) << "<";
+        for (const auto& q : quantifiers) {
+            os.write_white(indent + 1) << *q.first;
+            if (q.second) {
+                os << ": \n";
+                q.second->print(os, indent + 1);
+            }
+            else {
+                os << "\n";
+            }
+        }
+        os.write_white(indent + 1) << ">";
+    }
     for (const auto& a : args) {
-        os.write_white(indent + 1) << a.first->name << " = ";
+        os.write_white(indent + 1) << a.first->name << " = \n";
         a.second->print(os, indent + 1);
     }
     for (const auto& b : bindings) {

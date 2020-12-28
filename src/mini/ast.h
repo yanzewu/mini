@@ -253,8 +253,6 @@ namespace mini {
         Ptr<ExprNode> lhs;
         std::vector<Ptr<TypeNode>> args;
 
-        pType prog_type;
-
         TypeApplNode() : ExprNode(AST::Type_t::TYPEAPPL), lhs(NULL) {}
 
         void print(OutputStream& os, unsigned indent)const;

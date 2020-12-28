@@ -47,7 +47,8 @@ void test_frontend(const std::string& filename, std::ostream& output) {
     front_end.process(irprog);
 
     FileOutputStream os(output);
-    os << irprog << '\n';
+    irprog.print_full(os);
+    os << '\n';
 }
 
 int main(int argc, char** argv) {

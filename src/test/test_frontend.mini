@@ -10,28 +10,6 @@ let pass:function(nil) = \()->{nil}:nil;
 let append:function(array(int), int, array(int));
 let print:function(int, nil);
 
-#def if_action(sel:int, choices:tuple(function(nil), function(nil)))->nil{
-#    @index<function(nil)>(sel, choice)()
-#}
-#def copy_array_aux(src:array(int), dst:array(int), j:int, size:int)->nil {
-#    if_action(@less(j, size), (
-#        \()->copy_array_aux(src, dst, @add(j, 1), size),
-#        pass
-#    ))
-#}
-#def copy_array(src:array(int), dst:array(int), size:int)->nil {
-#    copy_array_aux(src, dst, 0, size)
-#}
-#def append(arr:array(int), val:int)->array(int){
-#    let arr2 = @arrayi(@add(@len(arr), 1)),
-#    copy_array(arr1, arr2, @len(arr1)),
-#    @setindex(arr2, @add(@len(arr), 1), val),
-#    arr2
-#}
-#def printf(fmt:array(char), src:array(object))->nil {
-#    @print(@format(fmt, src))
-#}
-
 let v1:int;
 let v2:int = 10;
 let v2_2:int = (10);
@@ -124,3 +102,42 @@ def f4()->int {
     let v10:function(int, array(int), array(int)) = v8,
     1
 };
+
+
+let uv1:forall<X>.function(X,X);
+let uv2:forall<X>.function(X,X) = \<X>(x:X)->x:X;
+set uv1 = uv2;
+let uv3:function(forall<X>.function(X,X), forall<X>.function(X,X)) = \(f:forall<X>.function(X,X))->{
+    \<X>(x:X)->f<X>(f<X>(x)):X
+}:forall<X>.function(X,X);
+
+interface I0 {
+    a:int
+};
+
+def f5<X implements I0>(x:X)->int{
+    x.a
+};
+
+interface I1 {
+    m1:int,
+    m2:function(int, int),
+    m3:forall<X>.function(X,X)
+};
+
+interface I2 extends I1 {
+    m4:float
+};
+
+interface I3 {
+    m5:I1,
+    m6:I2
+    #m7:I3
+};
+
+let i0:I0 = {a=2, b=5.0};
+let a0:int = i0.a;
+let i2:I2 = {m1=1, m2=negate, m3=uv1, m4=2.0};
+
+f5<I0>({a=2, b=5.0});
+f5<I0>(i0);

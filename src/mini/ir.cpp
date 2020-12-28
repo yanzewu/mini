@@ -20,6 +20,7 @@ const std::unordered_map<ByteCode::OpCode, std::string> code_backmap = {
     {ByteCode::LOADIF, "loadindexf"},
     {ByteCode::LOADIA, "loadindexa"},
     {ByteCode::LOADFIELD, "loadfield"},
+    {ByteCode::LOADINTERFACE, "loadinterface"},
     {ByteCode::LOADG, "loadglobal"},
     {ByteCode::LOADC, "loadconst"},
 
@@ -32,6 +33,7 @@ const std::unordered_map<ByteCode::OpCode, std::string> code_backmap = {
     {ByteCode::STOREIF, "storeindexf"},
     {ByteCode::STOREIA, "storeindexa"},
     {ByteCode::STOREFIELD, "storefield"},
+    {ByteCode::STOREINTERFACE, "storeinterface"},
     {ByteCode::STOREG, "storeglobal"},
 
     {ByteCode::ALLOC, "alloc"},
@@ -122,10 +124,12 @@ void ByteCode::print(OutputStream& os)const {
         break;
     }
     case ByteCode::LOADFIELD:
+    case ByteCode::LOADINTERFACE:
     case ByteCode::LOADG:
     case ByteCode::LOADC:
     case ByteCode::STOREG:
     case ByteCode::STOREFIELD:
+    case ByteCode::STOREINTERFACE:
     case ByteCode::NEW:
     case ByteCode::NEWCLOSURE:
     case ByteCode::CALL:
@@ -148,17 +152,40 @@ void ByteCode::print(OutputStream& os)const {
 
 OutputStream& Function::print(OutputStream& os, const IRProgram& irprog)const {
     irprog.constant_pool[info_index]->as<FunctionInfo>()->print(os, irprog);
-    return print_code(os);
+    return print_code(os, irprog);
 }
 
-OutputStream& Function::print_code(OutputStream& os) const {
+OutputStream& Function::print_code(OutputStream& os, const IRProgram& irprog) const {
     os << "  args_size=" << sz_arg << ", bindings=" << sz_bind << ", locals=" << sz_local << '\n';
     os << "  Code:\n";
 
     char sbuffer[10];    // ....
     for (unsigned int i = 0; i < codes.size(); i++) {
         sprintf(sbuffer, "%6d: ", i);
-        os << (const char*)sbuffer << codes[i] << '\n';
+        os << (const char*)sbuffer << codes[i];
+        switch (codes[i].code) {
+        case ByteCode::LOADINTERFACE:
+        case ByteCode::LOADC:
+        case ByteCode::STOREINTERFACE:
+        case ByteCode::NEW:
+        case ByteCode::NEWCLOSURE:
+        case ByteCode::CALL:
+        {
+            auto& m = irprog.constant_pool[codes[i].arg1.aarg];
+            switch (m->get_type()) {
+            case ConstantPoolObject::STRING: os.write_white(10) << "; " << *m; break;
+            case ConstantPoolObject::CLASS_LAYOUT: os.write_white(10) << "; ";
+                irprog.constant_pool[m->as<ClassLayout>()->info_index]->as<ClassInfo>()->print_simple(os, irprog);
+                break;
+            case ConstantPoolObject::FUNCTION: os.write_white(10) << "; ";
+                irprog.constant_pool[m->as<Function>()->info_index]->as<FunctionInfo>()->print_simple(os, irprog);
+                break;
+            default:break;
+            }
+        }
+        default:break;
+        }
+        os << '\n';
     }
     return os;
 }
@@ -278,7 +305,7 @@ OutputStream& IRProgram::print_full(OutputStream& os)const {
             constant_pool[constant_pool[i]->as<Function>()->info_index]->as<FunctionInfo>()->print_simple(os, *this);
             break;
         case ConstantPoolObject::CLASS_INFO: os.write_rspace("ClassInfo", 20) << *constant_pool[i]; break;
-        case ConstantPoolObject::FUNCTION_INFO: os.write_rspace("ClassInfo", 20) << *constant_pool[i]; break;
+        case ConstantPoolObject::FUNCTION_INFO: os.write_rspace("FunctionInfo", 20) << *constant_pool[i]; break;
         case ConstantPoolObject::LINE_NUMBER_TABLE: os.write_rspace("LineNumberTable", 20) << *constant_pool[i]; break;
         default:
             break;

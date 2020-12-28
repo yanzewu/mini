@@ -117,9 +117,15 @@ namespace mini {
                     }
                     break;
                 }
+                case AST::INTERFACE: {
+                    auto m_node = ast_cast<InterfaceNode>(node);
+                    symbol_table.insert_interface_type(m_node->symbol);         // insert it first, for circular import.
+                    nodes.push_back(node);
+                    break;
+                }
                 case AST::CLASS: {
                     auto m_node = ast_cast<ClassNode>(node);
-                    symbol_table.insert_type(m_node->symbol, TypeMetaData::CUSTOM);
+                    symbol_table.insert_object_type(m_node->symbol, TypeMetaData::OBJECT);
                     nodes.push_back(node);
                     break;
                 };

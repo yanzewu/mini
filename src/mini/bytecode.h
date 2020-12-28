@@ -40,6 +40,7 @@ namespace mini {
             LOADIF = 0x18,
             LOADIA = 0x19,
             LOADFIELD = 0x1c,
+            LOADINTERFACE = 0x1b,
             LOADG = 0x1d,
             LOADC = 0x1e,
 
@@ -52,6 +53,7 @@ namespace mini {
             STOREIF = 0x28,
             STOREIA = 0x29,
             STOREFIELD = 0x2c,
+            STOREINTERFACE = 0x2b,
             STOREG = 0x2d,
 
             ALLOC = 0x30,

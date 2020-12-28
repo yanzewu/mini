@@ -93,7 +93,7 @@ namespace mini {
             return os << "#" << info_index;
         }
 
-        OutputStream& print_code(OutputStream& os)const;
+        OutputStream& print_code(OutputStream& os, const IRProgram& irprog)const;
     };
 
     class ClassLayout : public ConstantPoolObject {

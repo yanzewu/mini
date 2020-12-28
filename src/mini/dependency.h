@@ -56,7 +56,7 @@ namespace mini {
 
             if (cur_loc.srcno == query_loc.srcno) {
                 return cur_loc.lineno == query_loc.lineno ?
-                    (cur_loc.colno > query_loc.colno) :
+                    (cur_loc.colno >= query_loc.colno) :
                     (cur_loc.lineno > query_loc.lineno);
             }
             else {

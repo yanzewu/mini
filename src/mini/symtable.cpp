@@ -72,15 +72,21 @@ VariableRef SymbolTable::find_var(const std::string& name, const SymbolInfo& inf
     return NULL;
 }
 
-TypedefRef SymbolTable::find_type(const std::string & name, const SymbolInfo & info) {
+std::pair<TypedefRef, unsigned> SymbolTable::find_type(const std::string & name, const SymbolInfo & info) {
+
+    for (auto tvt_iter = type_var_table_storage.rbegin(); tvt_iter != type_var_table_storage.rend(); tvt_iter++) {
+        auto ret = tvt_iter->find(name);
+        if (ret != tvt_iter->end() && dependency_ref->is_defined(info, ret->second->symbol->info)) {
+            return { ret->second.get(), tvt_iter - type_var_table_storage.rbegin() };
+        }
+    }
 
     auto ret = type_table.find(name);
-
     if (ret == type_table.end() || !dependency_ref->is_defined(info, ret->second->symbol->info)) {
-        return NULL;
+        return { NULL, 0 };
     }
     else {
-        return ret->second.get();
+        return { ret->second.get(), 0 };
     }
 
 }

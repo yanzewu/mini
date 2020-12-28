@@ -17,7 +17,6 @@ void IRCodeGenerator::process(const std::vector<pAST>& nodes, const SymbolTable&
     irprog.constant_pool.push_back(new LineNumberTable());
     irprog.line_number_table_index = irprog.constant_pool.size() - 1;
 
-    type_addr.resize(sym_table.type_table_size() + 1);
     build_system_type(sym_table);
 
     SymbolInfo info_main(Location(0, 0, 0));
@@ -25,7 +24,7 @@ void IRCodeGenerator::process(const std::vector<pAST>& nodes, const SymbolTable&
     // the "<main>" function does not belong to any class; it is a static method.
     irprog.entry_index = push_lambda_env(0, 0, "<main>",
         info_main,
-        BuiltinTypeBuilder("function")("nil")("nil")(sym_table) // the signature of main is automatically generated as function(nil,nil)                
+        PrimitiveTypeBuilder("function")("nil")("nil")(sym_table) // the signature of main is automatically generated as function(nil,nil)                
     );
 
     // build the <main> class
@@ -41,6 +40,12 @@ void IRCodeGenerator::process(const std::vector<pAST>& nodes, const SymbolTable&
         }
         else if (node->get_type() == AST::SET) {
             process_set(node->as<SetNode>());
+        }
+        else if (node->get_type() == AST::INTERFACE) {  // as if a new type is introduced
+            struct2layoutaddr(std::static_pointer_cast<StructType>(
+                sym_table.find_type(
+                    node->as<InterfaceNode>()->symbol->get_name())
+                ->as<InterfaceTypeMetaData>()->actual_type));
         }
         else if (node->get_type() == AST::CLASS) {
             process_class(node->as<ClassNode>());
@@ -65,10 +70,11 @@ void IRCodeGenerator::process_expr(const Ptr<ExprNode>& node, const std::string&
     case AST::CONSTANT: process_constant(node->as<ConstantNode>()); break;
     case AST::VAR: process_var(node->as<VarNode>()); break;
     case AST::ARRAY: process_array(node->as<ArrayNode>()); break;
-    case AST::TUPLE: process_tuple(node->as<TupleNode>()); break; // not implemented
-    case AST::STRUCT: break;    // not implemented (should be similar with class)
+    case AST::TUPLE: process_tuple(node->as<TupleNode>()); break;
+    case AST::STRUCT: process_struct(node->as<StructNode>()); break;
     case AST::FUNCALL: process_funcall(node->as<FunCallNode>()); break;
     case AST::GETFIELD: process_getfield(node->as<GetFieldNode>()); break;
+    case AST::TYPEAPPL: process_expr(node->as<TypeApplNode>()->lhs); break;
     case AST::LAMBDA: process_lambda(node->as<LambdaNode>(), name); break;
     default:
         throw std::runtime_error("Incorrect AST Type");
@@ -113,7 +119,7 @@ void IRCodeGenerator::process_var(const VarNode* node) {
 
 void IRCodeGenerator::process_array(const ArrayNode* node) {
     // alloc + store
-    auto tp = get_typebit(node->prog_type->args[0]);
+    auto tp = get_typebit(node->prog_type->as<PrimitiveType>()->args[0]);
     emit(ByteCode::consti(node->children.size()), node->get_info());
     emit(ByteCode::na_code(ByteCode::ALLOC, tp), node->get_info());
     for (size_t i = 0; i < node->children.size(); i++) {
@@ -136,6 +142,20 @@ void IRCodeGenerator::process_tuple(const TupleNode* node) {
     }
 }
 
+void IRCodeGenerator::process_struct(const StructNode* node) {
+    
+    auto layout = struct2layoutaddr(std::static_pointer_cast<StructType>(node->prog_type));
+    auto info = irprog->fetch_constant(layout)->as<ClassLayout>()->info_index;
+
+    emit(ByteCode::sa_code_a(ByteCode::NEW, layout), node->get_info());
+    for (const auto& f : node->children) {
+        emit(ByteCode::na_code(ByteCode::DUP), node->get_info());
+        Size_t field_offset = lookup_field_offset(info, field_ids.at(f.first->get_name()));
+        process_expr(f.second);
+        emit(ByteCode::sa_code_a(ByteCode::STOREFIELD, field_offset), node->get_info());
+    }
+}
+
 void IRCodeGenerator::process_funcall(const FunCallNode* node) {
     // call...
 
@@ -150,7 +170,18 @@ void IRCodeGenerator::process_funcall(const FunCallNode* node) {
 
 void IRCodeGenerator::process_getfield(const GetFieldNode* node) {
     process_expr(node->lhs);
-    emit(ByteCode::sa_code_a(ByteCode::LOADFIELD, node->ref->index), node->get_info());
+    if (node->lhs->prog_type->is_concrete()) {
+        // concrete => find class => get field ref 
+        Size_t infoaddr = type2infoaddr(node->lhs->prog_type);
+        Size_t field_offset = lookup_field_offset(infoaddr, field_ids.at(node->field->get_name()));
+        emit(ByteCode::sa_code_a(ByteCode::LOADFIELD, field_offset), node->get_info());
+    }
+    else if (node->lhs->prog_type->is_universal_variable()) {
+        emit(ByteCode::sa_code_a(ByteCode::LOADINTERFACE, field_ids.at(node->field->get_name())), node->get_info());
+    }
+    else {
+        throw std::runtime_error("Incorrect type in getfield");
+    }
 }
 
 void IRCodeGenerator::process_let(const LetNode* node, bool create_field) {
@@ -232,11 +263,12 @@ void IRCodeGenerator::process_lambda(const LambdaNode* node, const std::string& 
         }
     }
 
-    if (node->get_prog_type()->args.back()->is_nil()) {   // return nil (type checking is done in attributor
+    auto& ret_type = (node->prog_type->is_primitive() ? node->prog_type : node->prog_type->as<UniversalType>()->body )->as<PrimitiveType>()->args.back();
+    if (ret_type->is_primitive() && ret_type->as<PrimitiveType>()->is_nil()) {   // return nil (type checking is done in attributor
         emit(ByteCode::na_code(ByteCode::RETN), node->get_info());
     }
     else {
-        emit(ByteCode::na_code(ByteCode::RET, get_typebit(node->prog_type->args.back())), node->get_info());
+        emit(ByteCode::na_code(ByteCode::RET, get_typebit(ret_type)), node->get_info());
     }
 
 
@@ -260,7 +292,7 @@ void IRCodeGenerator::process_lambda(const LambdaNode* node, const std::string& 
 }
 
 void IRCodeGenerator::process_class(const ClassNode* node) {
-    push_class_env(node->symbol->get_name(), node->get_info(), node->ref->index);
+    push_class_env(node->symbol->get_name(), node->get_info(), node->ref->as<ObjectTypeMetaData>()->index);
     for (const auto& m : node->members) {
         add_field(m.first->symbol->get_name(), m.first->vtype->prog_type);
     }
@@ -291,7 +323,7 @@ void IRCodeGenerator::build_system_type(const SymbolTable& symbol_table) {
 
         ci->name_index = add_string(sti.name);
         ci->symbol_info = SymbolInfo::absolute();
-        type_addr[symbol_table.find_type(sti.name)->index] = cindex;
+        type_addr[BuiltinSymbolGenerator::builtin_type_index(symbol_table.find_type(sti.name)->as<PrimitiveTypeMetaData>()->get_type())] = cindex;
     }
 }
 
@@ -309,11 +341,15 @@ Size_t IRCodeGenerator::push_lambda_env(Size_t narg, Size_t nbind, const StringR
     f->info_index = irprog->add_constant(fi);
     fi->name_index = add_string(name);
     fi->symbol_info = info;
+
+    const auto& funtype = type->is_universal() ? type->as<UniversalType>()->body : type;
+    // funtype cannot be nested UT -- since the syntax does not allow it.
+
     if (!info.is_absolute()) fi->symbol_info.location = translate_location(info.location);
-    for (unsigned i = 0; i < type->args.size() - 1; i++) {
-        fi->arg_index.push_back(type2infoaddr(type->args[i]->ref));
+    for (unsigned i = 0; i < funtype->as<PrimitiveType>()->args.size() - 1; i++) {
+        fi->arg_index.push_back(type2infoaddr(funtype->as<PrimitiveType>()->args[i]));
     }
-    fi->ret_index = type2infoaddr(type->args.back()->ref);
+    fi->ret_index = type2infoaddr(funtype->as<PrimitiveType>()->args.back());
 
     return findex;
 }

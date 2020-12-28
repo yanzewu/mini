@@ -171,6 +171,7 @@ Ptr<ExprNode> mini::Parser::parse_expr() {
         }
         else if (test_keyword_inc(Keyword::DOT)) {
             auto m_node = std::make_shared<GetFieldNode>();
+            m_node->set_info(get_last_info());
             m_node->lhs = prefix;
             m_node->field = get_id_inc();
             std::static_pointer_cast<ExprNode>(m_node).swap(prefix);
@@ -349,7 +350,7 @@ void mini::Parser::parse_quantifier_def_wb(std::vector<std::pair<pSymbol, Ptr<Ty
             arg_type = parse_type();
         }
         else {
-            arg_type = std::make_shared<TypeNode>(std::make_shared<Symbol>("top", cur_token->get_info()));
+            arg_type = NULL;
         }
         args.push_back({ arg_name, arg_type });
 

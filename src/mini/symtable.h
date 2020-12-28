@@ -65,24 +65,19 @@ namespace mini {
             return find_var(ref->get_name(), ref->get_info());
         }
 
-        // find a type defined before current location
-        TypedefRef find_type(const std::string&, const SymbolInfo&);
-
-        // find a type in all scopes defined before current location, specified in ref->cur_info()
-        TypedefRef find_type(ConstSymbolRef ref) {
-            return find_type(ref->get_name(), ref->get_info());
-        }
-
         // find a predefined type
         ConstTypedefRef find_type(const std::string& name)const {
             return type_table.find(name)->second.get();
         }
 
+        // find a type or type variable. returns (ref, relative stack distance)
+        std::pair<TypedefRef, unsigned> find_type(const std::string& name, const SymbolInfo&);
+
         // insert a variable into the top scope. Throws if already defined.
         VariableRef insert_var(const pSymbol& symbol, VarMetaData::Source source, const pType& prog_type);
 
         // Caution: Will add reference to typemeta.
-        TypedefRef insert_type(const pTypedef& typemeta) {
+        TypedefRef insert_primitive_type(const pTypedef& typemeta) {
             auto r = type_table.insert({ typemeta->symbol->get_name(), typemeta});
             if (!r.second) {
                 typemeta->symbol->get_info().throw_exception("Type " + typemeta->symbol->get_name() + " is already defined");
@@ -90,11 +85,31 @@ namespace mini {
             return r.first->second.get();
         }
 
-        // insert a type. Throws if already defined.
-        TypedefRef insert_type(const pSymbol& symbol, TypeMetaData::Type_t category = TypeMetaData::CUSTOM) {
-            auto p_typesymbol = std::make_shared<TypeMetaData>(symbol, category);
+        // insert a named type. Throws if already defined.
+        TypedefRef insert_object_type(const pSymbol& symbol, TypeMetaData::Type_t category = TypeMetaData::OBJECT) {
+            auto p_typesymbol = std::make_shared<ObjectTypeMetaData>(symbol, category);
             p_typesymbol->index = type_table.size();
             auto r = type_table.insert({ symbol->get_name(), p_typesymbol });
+            if (!r.second) {
+                symbol->get_info().throw_exception("Type " + symbol->get_name() + " is already defined");
+            }
+            return r.first->second.get();
+        }
+
+        // insert a named interface type. Throws if already defined.
+        TypedefRef insert_interface_type(const pSymbol& symbol) {
+            auto p_typesymbol = std::make_shared<InterfaceTypeMetaData>(symbol);
+            auto r = type_table.insert({ symbol->get_name(), p_typesymbol });
+            if (!r.second) {
+                symbol->get_info().throw_exception("Type " + symbol->get_name() + " is already defined");
+            }
+            return r.first->second.get();
+        }
+
+        // insert a type variable
+        TypedefRef insert_type_var(const pSymbol& symbol, unsigned arg_id, const pType& quantifier) {
+            auto p_typesymbol = std::make_shared<TypeVariableMetaData>(symbol, arg_id, quantifier);
+            auto r = type_var_table_storage.back().insert({ symbol->get_name(), p_typesymbol });
             if (!r.second) {
                 symbol->get_info().throw_exception("Type " + symbol->get_name() + " is already defined");
             }
@@ -125,6 +140,14 @@ namespace mini {
             return var_table_stack.back();
         }
 
+        void push_type_scope() {
+            type_var_table_storage.resize(type_var_table_storage.size() + 1);
+        }
+
+        void pop_type_scope() {
+            type_var_table_storage.pop_back();
+        }
+
         Index_t next_var_index(VarMetaData::Source source)const {
             return var_table_storage[var_table_stack.back()].next_index(source);
         }
@@ -148,9 +171,12 @@ namespace mini {
     private:
 
         typedef std::unordered_map<std::string, pTypedef> LocalTypeTable;
+        typedef std::unordered_map<std::string, std::shared_ptr<TypeVariableMetaData>> LocalTypeVariableTable;
 
         std::vector<LocalVarTable> var_table_storage;
         LocalTypeTable type_table;
+        std::vector<LocalTypeVariableTable> type_var_table_storage;
+        // typevar table will be destroyed after used since it will be evaluated immediately
 
         std::vector<unsigned> var_table_stack;
 

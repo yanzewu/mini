@@ -156,6 +156,8 @@
     <ClInclude Include="builtin.h" />
     <ClInclude Include="token.h" />
     <ClInclude Include="type.h" />
+    <ClInclude Include="typeaux.h" />
+    <ClInclude Include="typemetadata.h" />
     <ClInclude Include="value.h" />
     <ClInclude Include="symtable.h" />
     <ClInclude Include="vm.h" />
