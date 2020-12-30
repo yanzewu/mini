@@ -88,7 +88,7 @@ namespace mini {
 
         // 'wb' stands for without boundary: the leftest word is assume parsed.
 
-        Ptr<LetNode> parse_let_wb();
+        Ptr<LetNode> parse_let_wb(bool allow_expr=true);
 
         Ptr<SetNode> parse_set_wb();
 

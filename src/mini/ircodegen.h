@@ -51,7 +51,8 @@ namespace mini {
 
         // get the layout address of a struct type
         Size_t struct2layoutaddr(const std::shared_ptr<StructType>& st) {
-            const auto& [addr, notfound] = struct_addr.insert({ StructType::Identifier(std::static_pointer_cast<StructType>(st->erasure())), Size_t(0) });
+            const auto& [addr, notfound] = struct_addr.insert({ 
+                StructType::Identifier(std::static_pointer_cast<StructType>(st->erasure(ref_addressable))), Size_t(0) });
             if (!notfound) return addr->second;
 
             // Register a new struct type.
@@ -122,7 +123,8 @@ namespace mini {
                 return irprog->fetch_constant(
                     type_addr.at(tr->as<ObjectType>()->ref->as<ObjectTypeMetaData>()->index)
                 )->as<ClassLayout>()->info_index;
-            case Type::Type_t::VARIABLE: return type_addr.at(Size_t(tr->erased_primitive_type()));
+            case Type::Type_t::VARIABLE: 
+                return type_addr.at(BuiltinSymbolGenerator::builtin_type_index(tr->erased_primitive_type()));
             case Type::Type_t::UNIVERSAL: return type2infoaddr(tr->as<UniversalType>()->body);
             default:
                 throw std::runtime_error("Unsupported type");
@@ -197,6 +199,7 @@ namespace mini {
         std::unordered_map<uint64_t, Size_t> field_indices;     // field offsets map, keyed by info_id:field_id
         std::unordered_map<StructType::Identifier, Size_t, StructType::Hasher> struct_addr;      // address of classlayout for struct types
         size_t struct_count = 0;
+        ConstTypedefRef ref_addressable;
     };
 
 }

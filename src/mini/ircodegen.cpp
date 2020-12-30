@@ -18,6 +18,7 @@ void IRCodeGenerator::process(const std::vector<pAST>& nodes, const SymbolTable&
     irprog.line_number_table_index = irprog.constant_pool.size() - 1;
 
     build_system_type(sym_table);
+    ref_addressable = sym_table.find_type("@Addressable");
 
     SymbolInfo info_main(Location(0, 0, 0));
 

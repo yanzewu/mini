@@ -107,7 +107,7 @@ namespace mini {
                     t->quantifiers.push_back(q.second->prog_type);
                 }
                 else {
-                    auto mytop = std::make_shared<StructType>();    // TODO better use a static variable, if other than struct.
+                    auto mytop = std::make_shared<PrimitiveType>(symbol_table->find_type("@Addressable"));
                     symbol_table->insert_type_var(q.first, i, mytop);
                     t->quantifiers.push_back(mytop);
                 }
@@ -204,11 +204,6 @@ namespace mini {
         }
 
         void process_struct(StructNode* m_node) {
-
-            if (m_node->children.size() == 0) {
-                m_node->set_prog_type(std::make_shared<PrimitiveType>(symbol_table->find_type("object")));
-                return;
-            }
 
             std::unordered_map<std::string, pType> fields;
 
@@ -347,7 +342,7 @@ namespace mini {
                         t->quantifiers.push_back(q.second->prog_type);
                     }
                     else {
-                        auto mytop = std::make_shared<StructType>();    // TODO better use a static variable, if other than struct.
+                        auto mytop = std::make_shared<PrimitiveType>(symbol_table->find_type("@Addressable"));
                         symbol_table->insert_type_var(q.first, i, mytop);
                         t->quantifiers.push_back(mytop);
                     }
@@ -364,8 +359,10 @@ namespace mini {
                 symbol_table->insert_var(v.first, VarMetaData::Source::ARG, v.second->prog_type);
             }
 
-            process_type(m_node->ret_type);
-            args_type.push_back(m_node->ret_type->prog_type);
+            if (m_node->ret_type) {
+                process_type(m_node->ret_type);
+                args_type.push_back(m_node->ret_type->prog_type);
+            }
             binding_cache.push_back({});
 
 
@@ -393,10 +390,13 @@ namespace mini {
             binding_cache.pop_back();
             symbol_table->pop_scope();
 
-            // match the type of last statement
+            // match the type of last statement (or reconstruct)
             // the full monad feature will be improved in the future -- where the last statement should be 'return x'
             const auto& s_last = m_node->statements.back();
-            if (s_last->is_expr()) {
+            if (!m_node->ret_type) {
+                args_type.push_back(s_last->as<ExprNode>()->prog_type);
+            }
+            else if (s_last->is_expr()) {
                 match_type(args_type.back(), s_last->as<ExprNode>()->prog_type, s_last->get_info());
             }
             else if (m_node->ret_type->prog_type->is_primitive() && 
@@ -419,11 +419,18 @@ namespace mini {
 
         void process_let(LetNode* m_node) {
 
-            process_type(m_node->vtype);
+            if (m_node->vtype) process_type(m_node->vtype);
 
             if (m_node->expr) {
                 process_expr(m_node->expr);
-                match_type_in_decl(m_node->vtype->prog_type, m_node->expr->prog_type, m_node->get_info());
+                if (m_node->vtype) {
+                    match_type_in_decl(m_node->vtype->prog_type, m_node->expr->prog_type, m_node->get_info());
+                }
+                else {
+                    m_node->vtype = std::make_shared<TypeNode>(
+                        std::make_shared<Symbol>("auto", m_node->get_info()));
+                    m_node->vtype->prog_type = m_node->expr->prog_type;
+                }
             }
 
             if (symbol_table->cur_scope() != 0) {

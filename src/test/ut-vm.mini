@@ -15,7 +15,7 @@ def fail_test()->nil {
 };
 
 def require(v:int, msg:array(char))->nil {
-    @indexf([
+    aget<function(nil)>([
         pass_test, 
         \()->{fail_test(), @print(msg), @print("\n")}:nil
     ], 
@@ -60,25 +60,25 @@ require(@eqi(@ftoi(123.9), 123), "float2int");
 
 # Basic Subtyping
 
-let vo1:object = 1;
-let vo2:object = 1.0;
-let vo3:object = true;
-let vo4:object = ["12345"];
+let vo1:top = 1;
+let vo2:top = 1.0;
+let vo3:top = true;
+let vo4:top = ["12345"];
 
 set vo1 = "abc";
 set vo2 = [[1]];
 #set vo3 = {};
 #set vo4 = {a=2, b="123"};
 
-let vao1:array(object) = [1,2,3];
+let vao1:array(top) = [1,2,3];
 set vao1 = "12345";
 
-let vto1:tuple(object, object);
+let vto1:tuple(top, top);
 let vt1:tuple(int, int);
 set vto1 = vt1;
 
 let vf2:function(int, int);
-let vf3:function(int, object);
+let vf3:function(int, top);
 set vf3 = vf2;
 
 # struct is tested in the future.
@@ -90,7 +90,7 @@ let vaii1:array(array(int)) = [[]];
 set vaii1 = [[5]];
 set vaii1 = [[5, 6], [4], []];
 
-let vtoo:tuple(object, object) = (1, '2');
+let vtoo:tuple(top, top) = (1, '2');
 let vtia:tuple(int, array(char)) = (1, "2");
 
 # Expression: Lambda
@@ -115,26 +115,100 @@ require(@eqi(@muli(-5, -7), 35), "mul");
 require(@eqi(@divi(6, 4), 1), "div");
 require(@eqi(@modi(6, 5), 1), "mod");
 require(@eqi(@negi(5), -5), "neg");
-require(@eqi(@andi(1, 0), 0), "and");
-require(@eqi(@ori(1, 0), 1), "or");
-require(@eqi(@xori(1, 0), 1), "xor");
-require(@eqi(@noti(1), 0), "not");
+require(@eqi(@and(1, 0), 0), "and");
+require(@eqi(@or(1, 0), 1), "or");
+require(@eqi(@xor(1, 0), 1), "xor");
+require(@eqi(@not(1), 0), "not");
 require(@neqi(1, 2), "!=");
-require(@lessi(1, 2), "<");
-require(@lesseqi(1, 2), "<=");
-require(@greateri(2, -1), ">");
-require(@greatereqi(-1, -1), ">=");
+require(@lti(1, 2), "<");
+require(@lei(1, 2), "<=");
+require(@gti(2, -1), ">");
+require(@gei(-1, -1), ">=");
 
-require(@eqi(@indexi([1,2,3], 2), 3), "indexi");
+require(@eqi(@ageti([1,2,3], 2), 3), "ageti");
 
 let va:array(int) = @arrayi(3);
-@setindexi(va, 2, 5);
-require(@eqi(@indexi(va, 2), 5), "setindexi");
-require(@eqi(@sizeof(va), 12), "sizeof");
+@aseti(va, 2, 5);
+require(@eqi(@ageti(va, 2), 5), "aseti");
+require(@eqi(@len(va), 12), "len");
 
 let s:array(char) = @format("% -+5.5f", [123.45678]);
-require(@eqi(@ctoi(@index(s, 4)), 46), "format");
-require(@eqi(@ctoi(@index(s, 9)), 56), "format");
+require(@eqi(@ctoi(@aget(s, 4)), 46), "format");
+require(@eqi(@ctoi(@aget(s, 9)), 56), "format");
+
+# interfaces
+
+interface I0 {
+    a:int,
+    b:float
+};
+let i0:I0 = {a=1, b=2.0};
+require(@eqi(i0.a, 1), "getfield");
+
+def f<X implements I0>(x:X)->int {
+    x.a
+};
+
+interface I1 extends I0 {
+    c:int
+};
+
+require(@eqi(f<I0>(i0), 1), "interface");
+require(@eqi(f<I0>({a=1, b=2.0}), 1), "interface");
+require(@eqi(f<I1>({a=1, b=2.0, c=3}), 1), "interface");
+
+def ff(f:forall<X>.function(X,X))->forall<X>.function(X,X){
+    \<X>(x:X)->f<X>(f<X>(x)):X
+};
+
+require(@eqi( ff(\<X>(x:X)->x:X)<I0>(i0).a, 1), "rank 2 function");
+
+def dot<X,Y,Z>(f:function(X,Y), g:function(Y,Z))->function(X,Z){
+    \(x:X)->g(f(x)):Z
+};
+
+interface Int {
+    val:int
+};
+def Int(val:int)->Int {{val=val}};
+def equals_int(lhs:Int, rhs:Int)->int {@eqi(lhs.val, rhs.val)};
+def add_int(lhs:Int, rhs:Int)->Int { {val=@addi(lhs.val, rhs.val)}};
+
+interface I2 {
+    p:Int
+};
+
+interface I3 {
+    q:I2
+};
+
+let dotab = dot<I3,I2,Int>(
+        \x:I3->x.q,
+        \x:I2->x.p
+      );
+
+require(equals_int(
+     dotab({q={p=Int(2)}}), Int(2)), "function product");
+
+let until:forall<X>.function(function(X,int), function(X,X), X, X);
+
+set until = \<X>(cond:function(X,int), f:function(X,X), x:X)->{
+    aget<function(X)>([
+        \()->until<X>(cond, f, f(x)):X, 
+        \()->x:X
+    ], 
+    cond(x)
+    )()
+}:X;
+
+let sum:Int = Int(0);
+
+until<Int>(
+    \x:Int->equals_int(x,Int(10)),
+    \x:Int->{ set sum = add_int(sum, x),  add_int(x, Int(1))},
+    Int(1)
+    );
+require(equals_int(sum, Int(45)), "loop");
 
 summary();
 

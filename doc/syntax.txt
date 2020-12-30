@@ -1,0 +1,121 @@
+
+# Syntax of Mini v0.2
+
+general_block := class_decl ';'
+        | interface_decl ';'
+        | var_decl ';'
+        | function_decl ';'
+        | import_decl ';'
+        | expr ';'
+
+# Import
+
+import_decl := 'import' id
+        | 'import' import_list
+import_list := id
+        | import_list '.' id
+
+
+# Interfaces
+
+interface_decl := 'interface' id interface_decorator? interface_body
+
+interface_decorator := 'extends' id_list
+
+id_list := id
+        | id_list ',' id
+
+interface_body := '{' interface_decl_list? '}'
+
+interface_decl_list := interface_decl_list ',' id ':' type_expr
+        | interface_decl_list ',' id ':' 'Self'
+
+
+# Variable definition and expression
+
+var_decl := 'let' id ':' type_expr '=' expr
+        | 'let' id ':' type_expr
+
+type_expr := type       # in future will add support dynamic types
+        
+type := id
+        | id '(' type_list ')'
+        | 'forall' universal_quantifier '.' id
+        | 'forall' universal_quantifier '.' id '(' type_list ')'
+
+type_list := type
+        | type_list ',' type
+
+expr := var
+        | expr '(' arg_list? ')'
+        | expr '.' id
+        | '(' expr ')'
+        | expr '<' type_expr_list '>'
+
+arg_list := expr
+        | arg_list ',' expr
+
+var := id
+        | value
+
+value := intliteral                     # both positive and negative
+        | floatliteral
+        | charliteral
+        | lambda
+        | array
+        | tuple
+        | structure
+        | '(' ')'       # equivalent to nil
+        | 'nil'
+
+array := '[' ']'
+        | '[' array_content ']'
+array_content := expr
+        | array_content ',' expr
+
+tuple := '(' expr ',' tuple_content ')'         # tuple size must > 1
+tuple_content := expr
+        | tuple_content ',' expr
+
+structure := '{' '}'
+        | '{' structure_content '}'
+structure_content := id '=' expr
+        | structure_content ',' id '=' expr
+
+# Functions
+
+function_decl := 'def' id universal_quantifier? '(' arg_decl_list? ')' '->' type '{' function_body '}'
+        | 'def' id universal_quantifier? '(' arg_decl_list? ')' '{' function_body '}'
+
+lambda := '\' universal_quantifier? capture '->' expr
+        | '\' universal_quantifier? capture '->' expr ':' type
+        | '\' universal_quantifier? capture '->' '{' function_body '}'
+        | '\' universal_quantifier? capture '->' '{' function_body '}' ':' type # the types are greedy matched
+
+capture := id ':' type
+        | '(' arg_decl_list? ')'
+
+arg_decl_list := id ':' type
+        | arg_decl_list ',' id ':' type
+
+function_body := stmt                   # function body cannot be empty
+        | function_body ',' stmt
+
+stmt := expr
+        | var_decl
+        | function_decl
+        | set_stmt
+
+set_stmt := 'set' id '=' expr
+        | 'set' expr '.' id '=' expr
+
+
+# Universal Types
+
+universal_quantifier := '<' type_arg_list '>'
+
+type_arg_list := type_arg_list ',' id
+        | type_arg_list ',' id 'implements' type
+
+type_expr_list = type_expr
+        | type_expr_list ',' type_expr

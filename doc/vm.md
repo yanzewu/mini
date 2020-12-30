@@ -131,7 +131,18 @@ Forturnately, there is a single bytecode doing all of these stuff:
 
 `loadfield` requires the object reference to be on stack top. `storefield` requires object reference to be #2 stack top and data to be #1 stack top. Note the suffix is not necessary for `loadfield`, since the size of data can be inferred from layout table, which stores inside the class instance.
 
-#### 1.3.2 Allocation for Classes
+#### 1.3.2 Addressing for Special Fields
+
+For interfaces, the field index need to be lookuped during runtime. In the initialization time, the VM scan all field name indices (see Section 3.3) and construct a hashmap from field name to the actual field index. 
+
+To load/store a field directly from field name index, use 
+
+    loadinterface [fieldname]
+    storeinterface [fieldname]
+
+The field name is the index of field name in the constant pool. The stack change of `load/storeinterface` is similar as `load/storefield`.
+
+#### 1.3.3 Allocation for Classes
 
 Similar as addressing class members, if we want allocate memory for a new class, we must read the layout table to determine the size. The bytecode `new` does this altogether:
 
@@ -335,7 +346,10 @@ Debugging information may be stored in the constant pool. Their indices are used
 
         struct ClassInfo {
             unsigned name_index;
-            unsigned* field_type_index;
+            struct {
+                unsigned field_name_index;
+                unsigned field_type_index;
+            }* field_info;
             unsigned sz_field;
         };
 
@@ -364,11 +378,13 @@ throw | 0 | address -> | Throw the exception
 loadlocal(x) | 1:index | -> value | Load a local variable
 loadindex(x) | 0 | address, index -> value | Load a value with certain offset
 loadfield | 1:index | address -> value | Load a certain field from class instance
+loadinterface | 1:fieldname | address -> value | Load an interface field from class instance
 loadglobal | 1:index | -> value | Load a global variable
 loadconst | 1:index | -> addr | Load a constant from constant pool (may allocate if necessary)
 storelocal(x) | 1:index | value -> |
 storeindex(x) | 0 | address,index,value -> |
 storefield | 1:index | address,value -> |
+storeinterface | 1:fieldname | address,value -> |
 storeglobal | 1:index | value -> |
 alloc(x) | 0 | size -> address | Allocate an array
 new | 1:index of class | -> address | Create a class instance

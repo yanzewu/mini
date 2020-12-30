@@ -36,6 +36,7 @@ void VM::execute(const ByteCode& code) {
 		break;
 	}
 	case ByteCode::OpCode::LOADFIELD: load_field(stack.pop().aarg, code.arg1.iarg); break;
+	case ByteCode::OpCode::LOADINTERFACE: load_interface(stack.pop().aarg, code.arg1.iarg); break;
 	case ByteCode::OpCode::LOADG: load_field(global_addr, code.arg1.iarg); break;
 	case ByteCode::OpCode::LOADC: load_constant(code.arg1.aarg); break;
 	case ByteCode::OpCode::STOREL:
@@ -59,6 +60,13 @@ void VM::execute(const ByteCode& code) {
 		StackElem value = stack.pop();
 		Address addr = stack.pop().aarg;
 		store_field(addr, code.arg1.iarg, value);
+		break;
+	}
+	case ByteCode::OpCode::STOREINTERFACE:
+	{
+		StackElem value = stack.pop();
+		Address addr = stack.pop().aarg;
+		store_interface(addr, code.arg1.iarg, value);
 		break;
 	}
 	case ByteCode::STOREG: store_field(global_addr, code.arg1.iarg, stack.pop()); break;
@@ -196,6 +204,20 @@ void VM::handle_error(const RuntimeError& e) {
 	}
 }
 
+void VM::build_field_indices_map()
+{
+	for (Size_t i = 0; i < irprog->constant_pool.size(); i++) {
+		if (irprog->constant_pool[i]->get_type() == ConstantPoolObject::CLASS_INFO) {
+			Size_t field_index = 0;
+			for (const auto& f : irprog->constant_pool[i]->as<ClassInfo>()->field_info) {
+				// TODO if fieldinfo is global then mark it (without increasing field_index)
+				field_indices.insert({ FieldKey{i, f.name_index}.to_key(), FieldLocation{field_index, 0} });
+				field_index++;
+			}
+		}
+	}
+}
+
 void VM::load_local(Size_t index) {
 	Offset_t arg_offset = cur_function->sz_arg + cur_function->sz_bind;
 	if (index < arg_offset) {
@@ -270,11 +292,67 @@ void VM::store_field(Address addr, Size_t field_index, StackElem value) {
 	}
 }
 
+void VM::load_interface(Address addr, Size_t field_id)
+{
+	ClassObject* cobj;
+	Size_t sz_field, field_offset;
+	_get_interface_class_and_field(addr, field_id, cobj, field_offset, sz_field);
+	if (sz_field == 1) {
+		stack.push(cobj->fetch(field_offset));
+	}
+	else {  // may differentiate 4/8 when adding double support
+		stack.push(cobj->fetch4(field_offset));
+	}
+}
+
+void VM::store_interface(Address addr, Size_t field_id, StackElem value)
+{
+	ClassObject* cobj;
+	Size_t sz_field, field_offset;
+	_get_interface_class_and_field(addr, field_id, cobj, field_offset, sz_field);
+	if (sz_field == 1) {
+		cobj->store(field_offset, value.carg);
+	}
+	else {  // may differentiate 4/8 when adding double support
+		cobj->store4(field_offset, value);
+	}
+}
+
 void VM::_get_class_and_field(Address addr, Size_t field_index, ClassObject*& cobj, Size_t& field_offset, Size_t& sz_field) {
 	MemoryObject* obj = heap.fetch(addr);
 	runtime_assert(obj->type == MemoryObject::Type_t::CLASS, "Load field from non-class type");
 	cobj = obj->as<ClassObject>();
 	const ClassLayout* cl = irprog->fetch_constant(cobj->layout_addr())->as<ClassLayout>();  // get the layout first
+	try {
+		sz_field = cl->offset[field_index + 1] - cl->offset[field_index];
+	}
+	catch (const std::out_of_range&) {
+		throw RuntimeError("Field out of range");
+	}
+	field_offset = cl->offset[field_index];
+}
+
+void VM::_get_interface_class_and_field(Address addr, Size_t field_id, ClassObject*& cobj, Size_t& field_offset, Size_t& sz_field) {
+	MemoryObject* obj = heap.fetch(addr);
+	runtime_assert(obj->type == MemoryObject::Type_t::CLASS, "Load field from non-class type");
+	cobj = obj->as<ClassObject>();
+	const ClassLayout* cl = irprog->fetch_constant(cobj->layout_addr())->as<ClassLayout>();  // get the layout first
+
+	FieldLocation field_location;
+	try {
+		field_location = field_indices.at(FieldKey{ cl->info_index, field_id }.to_key());
+	}
+	catch (const std::out_of_range&) {
+		throw RuntimeError("Invalid field key");
+	}
+
+	// if global -> change to global layout
+	if (field_location.is_global) {
+		cobj = heap.fetch(global_addr)->as<ClassObject>();
+		cl = irprog->fetch_constant(cobj->layout_addr())->as<ClassLayout>();
+	}
+	Size_t field_index = field_location.field_index;
+
 	try {
 		sz_field = cl->offset[field_index + 1] - cl->offset[field_index];
 	}
@@ -316,16 +394,18 @@ void VM::allocate_closure(Size_t index) {
 	cobj->set_function_addr(index);
 	Offset_t nargs = cobj->data_size() / 4;
 	cobj->move_from(&stack.sp_offset(-nargs));
-	stack.sp -= nargs - 1;
-	stack.top() = addr;
+	//stack.sp -= nargs - 1;
+	stack.shrink(nargs);
+	stack.push(addr);
 }
 
 void VM::call_closure(Address addr) {
 	MemoryObject* obj = heap.fetch(addr);
 	runtime_assert(obj->type == MemoryObject::Type_t::CLOSURE, "Call a non-closure");
 	ClosureObject* cobj = obj->as<ClosureObject>();
-	stack.grow(cobj->data_size() / 4);
-	cobj->move_to(&stack.top());
+	Offset_t nargs = cobj->data_size() / 4;
+	stack.grow(nargs);
+	cobj->move_to(&stack.sp_offset(-nargs));
 	call(cobj->function_addr());
 }
 

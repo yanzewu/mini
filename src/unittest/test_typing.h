@@ -38,7 +38,7 @@ void test_typing() {
     REQUIRE(Type::compare(tb("top")().get(), tb("int")().get()) == Type::Ordering::GREATER, "top :> int");
     REQUIRE(Type::compare(tb("list")().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::GREATER, "list :> struct(a=nil)");
     REQUIRE(Type::compare(tb("top")().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::GREATER, "top :> struct(a=nil)");
-    REQUIRE(Type::compare(stb()().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::GREATER, "struct().get() > struct(a=nil)");
+    REQUIRE(Type::compare(stb()().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::UNCOMPARABLE, "struct() != struct(a=nil)");
     REQUIRE(Type::compare(stb()("a", tb("int"))().get(), stb()("a", tb("nil"))().get()) == Type::Ordering::UNCOMPARABLE,
         "struct(a=int) != struct(a=nil)");
     REQUIRE(Type::compare(stb()("a", stb()("x", tb("int")))("b", tb("float"))().get(),
@@ -78,12 +78,12 @@ void test_typing() {
                 tb("function")(tb("int"))(tb("nil"))(tb("tuple")("int")("nil"))().get()
             )
         , "evaluate[forall<x,y implements atomic>.function(x,y,tuple(x,y))] with [x=int, y=nil] == function(int,nil,tuple(int,nil))");*/
-    /*REQUIRE(utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
+    REQUIRE(utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
         { utb()("x")(tb("function")(vtb("x"))(vtb("x"))).build(symtable) }, SymbolInfo())->equals(
             tb("function")
             (utb()("x")(tb("function")(vtb("x"))(vtb("x"))))
             (utb()("x")(tb("function")(vtb("x"))(vtb("x")))).build(symtable).get()
-        ), "evaluate[forall<x>.function(x,x)] with [x=forall<x>.function(x,x)] == function(forall<x>.function(x,x),forall<x>.function(x,x))");*/
+        ), "evaluate[forall<x>.function(x,x)] with [x=forall<x>.function(x,x)] == function(forall<x>.function(x,x),forall<x>.function(x,x))");
     REQUIRE(
         utb()("x", stb()("a", tb("int")))(tb("function")("int")(vtb("x"))).build(symtable)->as<UniversalType>()->instanitiate(
             { stb()("a", tb("int"))("b", tb("nil"))() }, SymbolInfo())->equals(

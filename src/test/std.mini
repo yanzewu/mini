@@ -1,3 +1,21 @@
 
+# Standard Library of Mini, v0.2
 
+let id = \<X>(x:X)->x;
+let const = \<X,Y>(x:X, y:Y)->x;
+let seq = \<X,Y>(x:X, y:Y)->y;
+let dot = \<X,Y,Z>(f:function(X,Y), g:function(Y,Z))->{
+    \(x:X)->g(f(x)):Z
+};
+let flip = \<X,Y,Z>(f:function(X,Y,Z))->{
+    \(y:Y,x:X)->f(x,y)
+};
+let curry = \<X,Y,Z>(f:function(X,Y,Z))->{
+    \(x:X)->{\(y:Y,z:Z)->f(x,y,z)}
+};
+let uncurry = \<X,Y,Z>(f:function(X,function(Y,Z)))->{
+    \(x:X,y:Y,z:Z)->f(x)(y,z)
+};
+let error = @error;
+let undefined = @error("undefined");
 

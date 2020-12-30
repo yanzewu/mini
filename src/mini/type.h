@@ -65,7 +65,8 @@ namespace mini {
 
         PrimitiveTypeMetaData::Primitive_Type_t erased_primitive_type()const;
 
-        std::shared_ptr<Type> erasure()const;
+        // Provide the reference of Addessable.
+        std::shared_ptr<Type> erasure(ConstTypedefRef addressable_ref)const;
 
         virtual OutputStream& print(OutputStream& os)const { return os; }
 
@@ -152,10 +153,14 @@ namespace mini {
             return ref->as<PrimitiveTypeMetaData>()->primitive_type;
         }
 
-        bool equals(const Type* rhs)const override {
+        bool equals(const Type* rhs)const final {
             return type_matches(rhs) && 
                 type_name() == rhs->as<PrimitiveType>()->type_name() &&
                 array_equals(this->args, rhs->as<PrimitiveType>()->args);
+        }
+
+        bool is_interface_of(const Type* rhs)const final {
+            return type_name() == Primitive_Type_t::ADDRESSABLE && greater(rhs) == Ordering::GREATER;
         }
 
         Ordering greater(const Type* rhs)const final;
@@ -209,14 +214,14 @@ namespace mini {
 
         bool is_interface_of(const Type* rhs)const override {
             if (rhs->is_bottom()) return true;
-            if (fields.empty() && rhs->is_universal_variable())return true; // TODO This additional rule should move to Reflectable
 
             return type_matches(rhs) ?
                 field_compatible(fields, rhs->as<StructType>()->fields) != Ordering::UNCOMPARABLE : false;
         }
 
         Ordering greater(const Type* rhs)const override {
-            if (type_matches(rhs)) {
+            if (type_matches(rhs) && fields.size() == rhs->as<StructType>()->fields.size()) {
+                // we require the fields have same size so that field_compatible == field_match
                 return field_compatible(fields, rhs->as<StructType>()->fields);
             }
             else return Ordering::UNCOMPARABLE;
@@ -236,10 +241,9 @@ namespace mini {
     class ObjectType : public ConcreteType {
     public:
 
-        ObjectTypeMetaData* ref;
         std::unordered_map<std::string, pType> fields;
 
-        explicit ObjectType(ObjectTypeMetaData* ref) : ConcreteType(ref, Type_t::OBJECT) {}
+        explicit ObjectType(ConstTypedefRef ref) : ConcreteType(ref, Type_t::OBJECT) {}
 
         bool equals(const Type* rhs)const final {
             return type_matches(rhs) && ref == rhs->as<ObjectType>()->ref;
@@ -264,7 +268,6 @@ namespace mini {
         unsigned arg_id;        // declaration order in arguments
         ConstTypeRef quantifier;
 
-        UniversalTypeVariable() : Type(Type_t::VARIABLE) {}
         UniversalTypeVariable(unsigned stack_id, unsigned arg_id, ConstTypeRef quantifier) : Type(Type_t::VARIABLE), stack_id(stack_id), arg_id(arg_id), quantifier(quantifier) {}
 
         // equal: other must also be a type variable. The quantifier ref 
@@ -282,8 +285,8 @@ namespace mini {
             */
 
             if (equals(rhs)) return Ordering::EQUAL;
-            else if (rhs->is_top()) {   // In this version the top quantifier is {}, which is actually < list, = {} and < top. But not sure
-                                        // if that's still true in the future. So I only check top.
+            else if (rhs->is_top() || (rhs->is_primitive() && rhs->as<PrimitiveType>()->type_name() == PrimitiveTypeMetaData::ADDRESSABLE)) {   
+                                        // In this version the top quantifier is Addressable, which < top
                 return Ordering::LESS;
             }
             else {

@@ -3,7 +3,7 @@
 
 using namespace mini;
 
-Ptr<LetNode> mini::Parser::parse_let_wb() {
+Ptr<LetNode> mini::Parser::parse_let_wb(bool allow_auto) {
     // assuming the let is parsed.
 
     auto m_node = std::make_shared<LetNode>();
@@ -11,12 +11,16 @@ Ptr<LetNode> mini::Parser::parse_let_wb() {
 
     match_token(Token::ID);
     m_node->symbol = get_id_inc();
-    match_keyword_inc(Keyword::COLON);
-
-    m_node->vtype = parse_type();
-
-    if (test_keyword_inc(EQ)) {
+    if (allow_auto && test_keyword_inc(Keyword::EQ)) {    // type inference
         m_node->expr = parse_expr();
+        m_node->vtype = NULL;
+    }
+    else {
+        match_keyword_inc(Keyword::COLON);
+        m_node->vtype = parse_type();
+        if (test_keyword_inc(EQ)) {
+            m_node->expr = parse_expr();
+        }
     }
 
     return m_node;
@@ -416,7 +420,7 @@ Ptr<ClassNode> mini::Parser::parse_class_wb() {
                 else {
                     m_meta.is_static = false;
                 }
-                m_node->members.push_back({ parse_let_wb(), m_meta });
+                m_node->members.push_back({ parse_let_wb(false), m_meta });
             }
 
             if (test_keyword_inc(Keyword::COMMA)) continue;

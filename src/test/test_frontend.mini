@@ -135,9 +135,11 @@ interface I3 {
     #m7:I3
 };
 
-let i0:I0 = {a=2, b=5.0};
-let a0:int = i0.a;
+let i0:I0 = {a=2};
+let a0 = i0.a;
 let i2:I2 = {m1=1, m2=negate, m3=uv1, m4=2.0};
 
-f5<I0>({a=2, b=5.0});
+interface I0_prime {a:int, b:float};
+
+f5<I0_prime>({a=2, b=5.0});
 f5<I0>(i0);

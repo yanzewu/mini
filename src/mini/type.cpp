@@ -26,7 +26,7 @@ bool Type::qualifies_interface() const {
     return is_struct();
 }
 
-pType Type::erasure()const {
+pType Type::erasure(ConstTypedefRef ref_addressable)const {
     switch (_type)
     {
     case Type::Type_t::PRIMITIVE: {
@@ -38,7 +38,7 @@ pType Type::erasure()const {
     }
     case Type::Type_t::STRUCT: {
         std::unordered_map<std::string, pType> newfields;
-        for (const auto& f : as<StructType>()->fields) newfields.insert({ f.first, f.second->erasure() });
+        for (const auto& f : as<StructType>()->fields) newfields.insert({ f.first, f.second->erasure(ref_addressable) });
         return std::make_shared<StructType>(newfields);
     }
     case Type::Type_t::OBJECT: {
@@ -46,10 +46,10 @@ pType Type::erasure()const {
         return std::make_shared<ObjectType>(as<ObjectType>()->ref);
     }
     case Type::Type_t::VARIABLE: {
-        return std::make_shared<StructType>();  // will be an empty struct. Alternatively, the quantifier can be used, but seems unncessary here.
+        return std::make_shared<PrimitiveType>(ref_addressable); // Not sure if this has any problem
     }
     case Type::Type_t::UNIVERSAL: {
-        return as<UniversalType>()->body->erasure();
+        return as<UniversalType>()->body->erasure(ref_addressable);
     }
     default:
         throw std::runtime_error("Unrecognized type instance");
@@ -68,6 +68,12 @@ Type::Ordering PrimitiveType::greater(const Type* rhs)const {
     if (is_top()) {
         return rhs->is_kind0() ?
             (equals(rhs) ? Ordering::EQUAL : Ordering::GREATER) : 
+            Ordering::UNCOMPARABLE;
+    }
+    // Addressable: Greator than any non-atomic types (even universal)
+    else if (type_name() == Primitive_Type_t::ADDRESSABLE) {
+        return rhs->is_kind0() ?
+            (rhs->is_primitive() && !rhs->as<PrimitiveType>()->is_list_like() ? Ordering::UNCOMPARABLE : Ordering::GREATER) :
             Ordering::UNCOMPARABLE;
     }
     // list: Greater than any nonatomic concrete types

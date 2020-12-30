@@ -88,6 +88,7 @@ namespace mini {
         void load(const IRProgram& irprog) {
             this->irprog = &irprog;
             call(this->irprog->entry_index);
+            build_field_indices_map();
             allocate_class(this->irprog->global_pool_index);
             global_addr = stack.pop().aarg;
         }
@@ -119,6 +120,8 @@ namespace mini {
 
         void handle_error(const RuntimeError& e);
 
+        void build_field_indices_map();
+
         // local varible -> stack top
         void load_local(Size_t index);
 
@@ -133,7 +136,13 @@ namespace mini {
 
         void store_field(Address addr, Size_t field_index, StackElem value);
 
+        void load_interface(Address addr, Size_t field_id);
+
+        void store_interface(Address addr, Size_t field_id, StackElem value);
+
         void _get_class_and_field(Address addr, Size_t field_index, ClassObject*& cobj, Size_t& field_offset, Size_t& sz_field);
+
+        void _get_interface_class_and_field(Address addr, Size_t field_index, ClassObject*& cobj, Size_t& field_offset, Size_t& sz_field);
 
         void load_constant(Size_t index);
 
@@ -171,6 +180,14 @@ namespace mini {
         const IRProgram* irprog;
         Stack stack;
         MemorySection heap;
+
+        struct FieldKey { 
+            Size_t info_index, field_id;  
+            size_t to_key()const { return (size_t(info_index) << 32) + field_id; }
+        };
+        struct FieldLocation { Size_t field_index, is_global; };
+
+        std::unordered_map<uint64_t, FieldLocation> field_indices;
     };
 
 }

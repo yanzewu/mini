@@ -71,6 +71,8 @@ namespace mini {
             STRUCT = 15,
             VARIANT = 16,
             BOTTOM = 20,
+            ADDRESSABLE = 21,   // only for quantifier
+            REFLECTABLE = 22,   // only for quantifier
         } primitive_type;
 
         PrimitiveTypeMetaData(const pSymbol& symbol, Primitive_Type_t primitive_type) :
