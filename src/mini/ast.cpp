@@ -145,7 +145,8 @@ void LambdaNode::print(OutputStream& os, unsigned indent)const {
         os.write_white(indent + 1) << *b << "\n";
     }
     os.write_white(indent + 1) << "ret = ";
-    ret_type->print(os, indent + 1);
+    if (ret_type) ret_type->print(os, indent + 1);
+    else os.write_white(indent + 1) << "auto";
     for (const auto& st : statements) {
         st->print(os, indent + 1);
     }
@@ -160,7 +161,8 @@ void LetNode::print(OutputStream& os, unsigned indent)const {
         os << *symbol;
     }
     os << " \n";
-    vtype->print(os, indent + 1);
+    if (vtype) vtype->print(os, indent + 1);
+    else os.write_white(indent + 1) << "auto";
     if (expr) {
         expr->print(os, indent + 1);
     }

@@ -17,7 +17,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 @echo Testing importing
 x64\Debug\test.exe -m parse -i test_import1.mini -o test-import.out
 if %errorlevel% neq 0 exit /b %errorlevel%
-@echo Testing symantics
+@echo Testing semantics
 x64\Debug\test.exe -m semantic -i test_frontend.mini -o test-semantic.out
 if %errorlevel% neq 0 exit /b %errorlevel%
 @echo Testing codegen

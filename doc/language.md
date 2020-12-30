@@ -402,8 +402,8 @@ dot | `forall<X,Y,Z>.function(function(X,Y),` `function(Y,Z),function(X,Z))` | f
 flip |`forall<X,Y,Z>.function(function(X,Y,Z),` `function(Y,X,Z))` | flip the first and second argument
 curry | `forall<X,Y,Z>.function(function(X,Y,Z),` `function(X,function(Y,Z)))`
 uncurry | `forall<X,Y,Z>.function(function(X,function(Y,Z)),` `function(X,Y,Z))`
-error | `function(array(char),bottom)` | same as @error
-undefined | `function(bottom)` | @error("undefined")
+error | `function(array(char),bottom)` | same as @throw
+undefined | `function(bottom)` | @throw("undefined")
 
 Arrays and lists:
 
