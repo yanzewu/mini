@@ -44,7 +44,7 @@ void IRCodeGenerator::process(const std::vector<pAST>& nodes, const SymbolTable&
         }
         else if (node->get_type() == AST::INTERFACE) {  // as if a new type is introduced
             struct2layoutaddr(std::static_pointer_cast<StructType>(
-                sym_table.find_type(
+                sym_table.find_global_type(
                     node->as<InterfaceNode>()->symbol->get_name())
                 ->as<InterfaceTypeMetaData>()->actual_type));
         }
@@ -74,7 +74,8 @@ void IRCodeGenerator::process_expr(const Ptr<ExprNode>& node, const std::string&
     case AST::TUPLE: process_tuple(node->as<TupleNode>()); break;
     case AST::STRUCT: process_struct(node->as<StructNode>()); break;
     case AST::FUNCALL: process_funcall(node->as<FunCallNode>()); break;
-    case AST::GETFIELD: process_getfield(node->as<GetFieldNode>()); break;
+    case AST::GETFIELD: process_getfield(node->as<GetFieldNode>(), NULL); break;
+    case AST::NEW: process_new(node->as<NewNode>()); break;
     case AST::TYPEAPPL: process_expr(node->as<TypeApplNode>()->lhs); break;
     case AST::LAMBDA: process_lambda(node->as<LambdaNode>(), name); break;
     default:
@@ -151,7 +152,7 @@ void IRCodeGenerator::process_struct(const StructNode* node) {
     emit(ByteCode::sa_code_a(ByteCode::NEW, layout), node->get_info());
     for (const auto& f : node->children) {
         emit(ByteCode::na_code(ByteCode::DUP), node->get_info());
-        Size_t field_offset = lookup_field_offset(info, field_ids.at(f.first->get_name()));
+        Size_t field_offset = lookup_field_index(info, field_ids.at(f.first->get_name()));
         process_expr(f.second);
         emit(ByteCode::sa_code_a(ByteCode::STOREFIELD, field_offset), node->get_info());
     }
@@ -169,20 +170,39 @@ void IRCodeGenerator::process_funcall(const FunCallNode* node) {
     emit(ByteCode::na_code(ByteCode::POP), node->get_info());
 }
 
-void IRCodeGenerator::process_getfield(const GetFieldNode* node) {
+void IRCodeGenerator::process_getfield(const GetFieldNode* node, const std::shared_ptr<ExprNode>& assignment_expr) {
     process_expr(node->lhs);
+    if (assignment_expr) process_expr(assignment_expr);
+
     if (node->lhs->prog_type->is_concrete()) {
         // concrete => find class => get field ref 
         Size_t infoaddr = type2infoaddr(node->lhs->prog_type);
-        Size_t field_offset = lookup_field_offset(infoaddr, field_ids.at(node->field->get_name()));
-        emit(ByteCode::sa_code_a(ByteCode::LOADFIELD, field_offset), node->get_info());
+        Size_t field_index = lookup_field_index(infoaddr, field_ids.at(node->field->get_name()));
+        emit(ByteCode::sa_code_a(assignment_expr ? ByteCode::STOREFIELD : ByteCode::LOADFIELD, field_index), node->get_info());
     }
     else if (node->lhs->prog_type->is_universal_variable()) {
-        emit(ByteCode::sa_code_a(ByteCode::LOADINTERFACE, field_ids.at(node->field->get_name())), node->get_info());
+        emit(ByteCode::sa_code_a(assignment_expr ? ByteCode::STOREINTERFACE : ByteCode::LOADINTERFACE, field_ids.at(node->field->get_name())), node->get_info());
     }
     else {
         throw std::runtime_error("Incorrect type in getfield");
     }
+}
+
+void IRCodeGenerator::process_new(const NewNode* node) {
+    // as a funcall.
+
+    // Load the new_A: A->(...->A)
+    emit(ByteCode::sa_code_a(ByteCode::LOADG, node->constructor_ref->index), node->get_info());
+    if (node->self_arg) {
+        process_var(node->self_arg.get());
+    }
+    else {
+        auto layout = type_addr[node->type_ref->index];
+        emit(ByteCode::sa_code_a(ByteCode::NEW, layout), node->get_info());
+    }
+    emit(ByteCode::sa_code_i(ByteCode::CALLA, 1), node->get_info());
+    emit(ByteCode::na_code(ByteCode::SWAP), node->get_info());      // remove the function itself
+    emit(ByteCode::na_code(ByteCode::POP), node->get_info());
 }
 
 void IRCodeGenerator::process_let(const LetNode* node, bool create_field) {
@@ -237,9 +257,7 @@ void IRCodeGenerator::process_set(const SetNode* node) {
     }
     else {  // set field
         auto lhs = node->lhs->as<GetFieldNode>();
-        process_expr(lhs->lhs);
-        process_expr(node->expr, lhs->field->get_name());
-        emit(ByteCode::sa_code_a(ByteCode::STOREFIELD, lhs->ref->index), node->get_info());
+        process_getfield(lhs, node->expr);
     }
 
 }
@@ -293,12 +311,17 @@ void IRCodeGenerator::process_lambda(const LambdaNode* node, const std::string& 
 }
 
 void IRCodeGenerator::process_class(const ClassNode* node) {
-    push_class_env(node->symbol->get_name(), node->get_info(), node->ref->as<ObjectTypeMetaData>()->index);
-    for (const auto& m : node->members) {
-        add_field(m.first->symbol->get_name(), m.first->vtype->prog_type);
+    auto rref = node->ref->as<ObjectTypeMetaData>();
+    push_class_env(node->symbol->get_name(), node->get_info(), rref->index);
+    for (const auto& name : rref->field_names) {
+        add_field(name, rref->fields[name]);
     }
     pop_class_env();
-    // TODO constructor and initializer
+    
+    // constuctor: a global function
+    add_field(SymbolTable::constructor_name(node->symbol->name), node->constructor->prog_type);
+    process_lambda(node->constructor.get(), SymbolTable::constructor_name(node->symbol->get_name()));
+    emit(ByteCode::sa_code_a(ByteCode::STOREG, node->constructor_ref->index), node->get_info());
 }
 
 void IRCodeGenerator::build_system_lib(const SymbolTable& symbol_table) {

@@ -11,6 +11,7 @@ namespace mini {
 
     class DependencyChecker;
 
+    // Variable table of a closure
     class LocalVarTable {
     public:
 
@@ -65,8 +66,14 @@ namespace mini {
             return find_var(ref->get_name(), ref->get_info());
         }
 
-        // find a predefined type
-        ConstTypedefRef find_type(const std::string& name)const {
+        // find a primitive type
+        const PrimitiveTypeMetaData* find_type(const std::string& name)const {
+            auto r = type_table.find(name)->second.get();
+            return r->is_primitive() ? r->as<PrimitiveTypeMetaData>() : NULL;
+        }
+
+        // find a nonprimitive type. Use with care, since it won't check location
+        ConstTypedefRef find_global_type(const std::string& name)const {
             return type_table.find(name)->second.get();
         }
 
@@ -114,6 +121,14 @@ namespace mini {
                 symbol->get_info().throw_exception("Type " + symbol->get_name() + " is already defined");
             }
             return r.first->second.get();
+        }
+
+        // insert a constructor into global table with name converted; change the corresponding typemetadata
+        VariableRef insert_constructor(const pSymbol& symbol, ObjectTypeMetaData* otmd, const pType& prog_type) {
+            auto p_varsymbol = std::make_shared<VarMetaData>(
+                symbol, cur_scope(), var_table_storage[cur_scope()].next_index(VarMetaData::Source::GLOBAL), VarMetaData::Source::GLOBAL);
+            p_varsymbol->prog_type = prog_type;
+            return var_table_storage[cur_scope()].insert(constructor_name(symbol->get_name()), p_varsymbol);
         }
 
         // Create a new local scope. Return the scope id.
@@ -166,6 +181,10 @@ namespace mini {
                 os << "Scope " << i << ":\n" << var_table_storage[i];
             }
             return os;
+        }
+
+        static std::string constructor_name(const std::string& type_name) {
+            return "new " + type_name;
         }
 
     private:

@@ -90,6 +90,8 @@ namespace mini {
 
         Ptr<LetNode> parse_let_wb(bool allow_expr=true);
 
+        Ptr<LetNode> parse_let_field_wb();
+
         Ptr<SetNode> parse_set_wb();
 
         Ptr<TypeNode> parse_type();
@@ -100,7 +102,7 @@ namespace mini {
 
         Ptr<ArrayNode> parse_array_wb();
 
-        Ptr<LambdaNode> parse_lambda_wb();
+        Ptr<LambdaNode> parse_lambda_wb(bool is_constructor=false);
 
         Ptr<LetNode> parse_func_def_wb();
 

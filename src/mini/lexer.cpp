@@ -33,7 +33,9 @@ const std::unordered_map<std::string, Keyword> Lexer::keyword_map = {
     {"interface", INTERFACE},
     {"implements", IMPLEMENTS},
     {"extends", EXTENDS},
-    {"static", STATIC}
+    {"new", NEW},
+    {"static", STATIC},
+    {"virtual", VIRTUAL},
 };
 
 const std::unordered_map<Token::Type_t, std::string> token_backmap = {
@@ -67,7 +69,9 @@ const std::unordered_map<Keyword, std::string> symbol_backmap = {
     {SET, "set"},
     {IMPLEMENTS, "implements"},
     {EXTENDS, "extends"},
-    {STATIC, "static"}
+    {NEW, "new"},
+    {STATIC, "static"},
+    {VIRTUAL, "virtual"},
 };
 
 const std::string& mini::to_str(Token::Type_t t) {

@@ -24,6 +24,7 @@ namespace mini {
             LAMBDA,
             FUNCALL,    // term->term
             GETFIELD,
+            NEW,
             TYPE,       // type->type
             TYPEAPPL,   // type->term
             LET,
@@ -204,6 +205,7 @@ namespace mini {
 
         Ptr<ExprNode> caller;
         std::vector<Ptr<ExprNode>> args;
+        bool is_constructor = false;
 
         FunCallNode() : ExprNode(AST::Type_t::FUNCALL) {
 
@@ -217,7 +219,6 @@ namespace mini {
 
         Ptr<ExprNode> lhs;
         pSymbol field;
-        pFieldMetaData ref; // reference of field
 
         GetFieldNode() : ExprNode(AST::Type_t::GETFIELD), field(NULL) {}
 
@@ -245,6 +246,21 @@ namespace mini {
         bool is_expr()const {
             return false;
         }
+        void print(OutputStream& os, unsigned indent)const;
+    };
+
+    // new X
+    class NewNode : public ExprNode {
+    public:
+        // new parses like a variable but translates like a function call.
+        pSymbol symbol;
+        Ptr<VarNode> self_arg;                  // for extends. Represents the self parameter in extends A => new_A(self)
+        std::vector<Ptr<TypeNode>> type_args;   // type arguments.
+        VariableRef constructor_ref;            // ref to constructor function A->(...->A)
+        const ObjectTypeMetaData* type_ref;     // ref to the object type
+
+        explicit NewNode(const pSymbol& symbol) : ExprNode(AST::Type_t::NEW), symbol(symbol), self_arg(NULL), constructor_ref(NULL), type_ref(NULL) {}
+
         void print(OutputStream& os, unsigned indent)const;
     };
 
@@ -324,19 +340,19 @@ namespace mini {
 
         struct ClassMemberMeta {
             bool is_static;
+            bool is_virtual;
         };
 
         pSymbol symbol;
-        std::vector<Ptr<TypeNode>> parents;
+        Ptr<TypeNode> base;
         std::vector<Ptr<TypeNode>> interfaces;
         std::vector<std::pair<Ptr<LetNode>, ClassMemberMeta>> members;
+        Ptr<LambdaNode> constructor;
 
-        TypedefRef ref;
-        TypedefRef ref_parent;
-        std::vector<pFieldMetaData> field_meta;
+        TypedefRef ref = NULL;
+        VariableRef constructor_ref = NULL;
 
-        ClassNode() : CommandNode(AST::Type_t::CLASS) {}
-        ClassNode(const pSymbol& symbol) : CommandNode(AST::CLASS), symbol(symbol) {}
+        ClassNode(const pSymbol& symbol) : CommandNode(AST::CLASS), symbol(symbol), base(NULL), constructor(NULL) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };

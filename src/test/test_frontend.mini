@@ -143,3 +143,27 @@ interface I0_prime {a:int, b:float};
 
 f5<I0_prime>({a=2, b=5.0});
 f5<I0>(i0);
+
+class C1 implements I0 {
+    a:int,
+    virtual f:function(C1,int),
+    new (val:int)->{
+        set self.a = val,
+        set self.f = \(rhs:C1)->@eqi(self.a, rhs.a)
+    }
+};
+let c1 = new C1(1);
+set c1.a = 2;
+
+class C2 extends C1 implements I0 {
+    f:function(C1,int),
+    g:function(C2,int),
+    new<X>(val:int, x:X) extends C1(val)->{
+        set self.g = \(rhs:C2)->@gei(self.a, rhs.a)
+    }
+};
+let c2:C1 = new C2<array(char)>(2, "2");
+let c3 = new C2<array(char)>(2, "2");
+
+f5<C1>(c1);
+f5<C1>(c3);

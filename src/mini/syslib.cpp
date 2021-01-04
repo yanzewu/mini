@@ -50,12 +50,13 @@ std::unordered_map<std::string, PrimitiveTypeBuilder*> typebuilder_backmap =
     {"list", new PrimitiveTypeBuilder("list")},
     {"object", new PrimitiveTypeBuilder("object")},
     {"bottom", new PrimitiveTypeBuilder("bottom")},
+    {"@Addressable", new PrimitiveTypeBuilder("@Addressable")},
 };
 
 pType PrimitiveTypeBuilder::operator()()const
 {
     auto t = typename_backmap.at(s);
-    auto r = std::make_shared<PrimitiveType>(t);
+    auto r = std::make_shared<PrimitiveType>(t->as<PrimitiveTypeMetaData>());
     for (const auto& a : args) {
         r->args.push_back((*a)());
     }
@@ -140,7 +141,7 @@ pType UniversalTypeBuilder::build(SymbolTable& st)const
     st.pop_type_scope();
 
     if (!b->is_concrete()) throw std::runtime_error("Need a concrete type");
-    r->body = std::static_pointer_cast<ConcreteType>(b);
+    r->body = b;
     return r;
 }
 
@@ -174,7 +175,7 @@ std::vector<BuiltinSymbolGenerator::BuiltinFunctionInfo> BuiltinSymbolGenerator:
     /* Comparison */
     { "@cmpi", {TB("int"), TB("int"), TB("int")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::RETI} }},
     { "@eqi", {TB("int"), TB("int"), TB("int")},  {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::EQ}, {ByteCode::RETI} }},
-    { "@neqi", {TB("int"), TB("int"), TB("int")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::NE}, {ByteCode::RETI} }},
+    { "@nei", {TB("int"), TB("int"), TB("int")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::NE}, {ByteCode::RETI} }},
     { "@lti", {TB("int"), TB("int"), TB("int")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::LT}, {ByteCode::RETI} }},
     { "@lei", {TB("int"), TB("int"), TB("int")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::LE}, {ByteCode::RETI} }},
     { "@gti", {TB("int"), TB("int"), TB("int")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::CMPI}, {ByteCode::GT}, {ByteCode::RETI} }},
@@ -201,18 +202,18 @@ std::vector<BuiltinSymbolGenerator::BuiltinFunctionInfo> BuiltinSymbolGenerator:
     { "@array",  {TB("int"), TB("array")("char")},  {{ByteCode::LOADLI, 0, 0}, {ByteCode::ALLOC}, {ByteCode::RETA} }},
     { "@arrayi", {TB("int"), TB("array")("int")},   {{ByteCode::LOADLI, 0, 0}, {ByteCode::ALLOCI}, {ByteCode::RETA} }},
     { "@arrayf", {TB("int"), TB("array")("float")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::ALLOCF}, {ByteCode::RETA} }},
-    { "@arraya", {TB("int"), TB("array")("top")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::ALLOCA}, {ByteCode::RETA} }},
+    { "@arraya", {TB("int"), TB("array")("@Addressable")}, {{ByteCode::LOADLI, 0, 0}, {ByteCode::ALLOCA}, {ByteCode::RETA} }},
 
     { "@aget",  {TB("array")("char"), TB("int"), TB("char")},   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADI}, {ByteCode::RET} }},
     { "@ageti", {TB("array")("int"), TB("int"), TB("int")},     {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADII}, {ByteCode::RETI} }},
     { "@agetf", {TB("array")("float"), TB("int"), TB("float")}, {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADIF}, {ByteCode::RETF} }},
-    { "@ageta", {TB("array")("list"), TB("int"), TB("list")},   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADIA}, {ByteCode::RETA} }},
-    { "aget", {TB("array")("list"), TB("int"), TB("list")},   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADIA}, {ByteCode::RETA} }},
+    { "@ageta", {TB("array")("@Addressable"), TB("int"), TB("@Addressable")},   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADIA}, {ByteCode::RETA} }},
+    { "@get",  {TB("array")("@Addressable"), TB("int"), TB("@Addressable")},   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADIA}, {ByteCode::RETA} }},
 
     { "@aset",  {TB("array")("char"), TB("int"), TB("char"), TB("nil")},   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADL, 0, 2}, {ByteCode::STOREI}, {ByteCode::RETN} }},
     { "@aseti", {TB("array")("int"),  TB("int"), TB("int"), TB("nil")},     {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLI, 0, 2}, {ByteCode::STOREII}, {ByteCode::RETN} }},
     { "@asetf", {TB("array")("float"),TB("int"), TB("float"), TB("nil")}, {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLF, 0, 2}, {ByteCode::STOREIF}, {ByteCode::RETN} }},
-    { "@aseta", {TB("array")("list"),  TB("int"), TB("list"), TB("nil")}, {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLA, 0, 2}, {ByteCode::STOREIA}, {ByteCode::RETN} }},
+    { "@aseta", {TB("array")("@Addressable"),  TB("int"), TB("@Addressable"), TB("nil")}, {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLA, 0, 2}, {ByteCode::STOREIA}, {ByteCode::RETN} }},
     
     /* Misc */
     { "@print", {TB("array")("char"), TB("nil")}, {{ByteCode::LOADLA, 0, 0}, {ByteCode::CALLNATIVE, 0, 0}, {ByteCode::RETN} }},

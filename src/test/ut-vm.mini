@@ -15,7 +15,7 @@ def fail_test()->nil {
 };
 
 def require(v:int, msg:array(char))->nil {
-    aget<function(nil)>([
+    @get<function(nil)>([
         pass_test, 
         \()->{fail_test(), @print(msg), @print("\n")}:nil
     ], 
@@ -119,7 +119,7 @@ require(@eqi(@and(1, 0), 0), "and");
 require(@eqi(@or(1, 0), 1), "or");
 require(@eqi(@xor(1, 0), 1), "xor");
 require(@eqi(@not(1), 0), "not");
-require(@neqi(1, 2), "!=");
+require(@nei(1, 2), "!=");
 require(@lti(1, 2), "<");
 require(@lei(1, 2), "<=");
 require(@gti(2, -1), ">");
@@ -193,7 +193,7 @@ require(equals_int(
 let until:forall<X>.function(function(X,int), function(X,X), X, X);
 
 set until = \<X>(cond:function(X,int), f:function(X,X), x:X)->{
-    aget<function(X)>([
+    @get<function(X)>([
         \()->until<X>(cond, f, f(x)):X, 
         \()->x:X
     ], 

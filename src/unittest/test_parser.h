@@ -179,15 +179,21 @@ void test_parser() {
 
     // Classes
 
-    PARSE("class C1 {m1:int,m2 : array(int) = [], static m3 : int, def m4(c : C1, a : int)->array(int) { append(c.m2, a)}}; ");
+    PARSE("class C1 {m1:int, virtual m2:array(int), new <X,Y>(a:int)->{set self.m1 = a,set self.m2 = [1, 2, 3]} };");
         REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[0].first)->symbol->get_name() == "m1", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[1].first)->symbol->get_name() == "m2", s.c_str());
-        REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[2].first)->symbol->get_name() == "m3", s.c_str());
-        REQUIRE(ast_cast<ClassNode>(ast[0])->members[2].second.is_static == true, s.c_str());
-        REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[3].first)->symbol->get_name() == "m4", s.c_str());
-    PARSE("class C2 extends C1 implements I1 {a:int, b:int};"); 
-        REQUIRE(ast_cast<ClassNode>(ast[0])->parents[0]->symbol->get_name() == "C1", s.c_str());
+        REQUIRE(ast_cast<ClassNode>(ast[0])->members[1].second.is_virtual, s.c_str());
+        REQUIRE(ast[0]->as<ClassNode>()->constructor->quantifiers[0].first->get_name() == "X", s.c_str());
+        REQUIRE(ast[0]->as<ClassNode>()->constructor->statements.size() == 2, s.c_str());
+        
+    PARSE("class C2 extends C1 implements I1 {new(b:int) extends C1<int, char>(b)->{new C1<int, float>(2)}, m3:int };"); 
+        REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[0].first)->symbol->get_name() == "m3", s.c_str());
+        REQUIRE(ast_cast<ClassNode>(ast[0])->base->symbol->get_name() == "C1", s.c_str());
         REQUIRE(ast_cast<ClassNode>(ast[0])->interfaces[0]->symbol->get_name() == "I1", s.c_str());
+        REQUIRE(ast[0]->as<ClassNode>()->constructor->statements[0]->as<FunCallNode>()->caller->as<NewNode>()->symbol->get_name() == "C1", s.c_str());
+        REQUIRE(ast[0]->as<ClassNode>()->constructor->statements[0]->as<FunCallNode>()->caller->as<NewNode>()->type_args[1]->symbol->get_name() == "char", s.c_str());
+        REQUIRE(ast[0]->as<ClassNode>()->constructor->statements[1]->as<FunCallNode>()->caller->as<NewNode>()->symbol->get_name() == "C1", s.c_str());
+        REQUIRE(ast[0]->as<ClassNode>()->constructor->statements[1]->as<FunCallNode>()->caller->as<NewNode>()->type_args[1]->symbol->get_name() == "float", s.c_str());
         
     summary();
 

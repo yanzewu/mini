@@ -77,6 +77,16 @@ void GetFieldNode::print(OutputStream& os, unsigned indent)const {
     lhs->print(os, indent + 1);
 }
 
+void NewNode::print(OutputStream& os, unsigned indent) const {
+    os.write_white(indent) << "New ";
+    if (!type_ref) os << *symbol;
+    else os << *type_ref;
+
+    os.write_white(1);
+    print_type(os);
+
+}
+
 void TypeNode::print(OutputStream& os, unsigned indent)const {
     os.write_white(indent) << "Type ";
 
@@ -112,10 +122,8 @@ void TypeApplNode::print(OutputStream& os, unsigned indent) const {
     os << "\n";
 
     lhs->print(os, indent + 1);
-    os << '\n';
     for (const auto& a : args) {
         a->print(os, indent + 1);
-        os << '\n';
     }
 }
 
@@ -180,11 +188,8 @@ void SetNode::print(OutputStream& os, unsigned indent)const {
 void ClassNode::print(OutputStream& os, unsigned indent)const {
     os.write_white(indent) << "Class " << *symbol;
     
-    if (parents.size() > 0) {
-        os << "extends";
-        for (const auto& p : parents) {
-            os << ' ' << *p;
-        }
+    if (base) {
+        os << "extends " << *base;
     }
     if (interfaces.size() > 0) {
         os << "implements";
@@ -210,5 +215,4 @@ void ImportNode::print(OutputStream& os, unsigned indent)const {
     os.write_white(indent) << "Import ";
     os << get_filename();
 };
-
 

@@ -69,7 +69,7 @@ namespace mini {
                     process_type(a);
                     type_args.push_back(a->prog_type);
                 }
-                m_node->prog_type = std::make_shared<PrimitiveType>(ref, type_args);
+                m_node->prog_type = std::make_shared<PrimitiveType>(rt, type_args);
             }
             else if (ref->is_interface()) {
                 m_node->prog_type = ref->as<InterfaceTypeMetaData>()->actual_type;
@@ -80,28 +80,41 @@ namespace mini {
                 auto rt = ref->as<TypeVariableMetaData>();
                 m_node->prog_type = std::make_shared<UniversalTypeVariable>(stack_id, rt->arg_id, rt->quantifier.get());
             }
+            else if (ref->is_object()) {
+                m_node->prog_type = std::make_shared<ObjectType>(ref->as<ObjectTypeMetaData>());
+            }
             else {
-                // TODO process object_type
+                // TODO advanced types
                 throw std::runtime_error("ref not defined");
             }
         }
 
         void process_universal_type(const Ptr<TypeNode>& m_node) {
-            for (const auto& q : m_node->quantifiers) {
+            
+            auto t = std::make_shared<UniversalType>();
+            process_quantifiers(m_node->quantifiers, t);
+            process_concrete_type(m_node);    // TODO in F-omega t->body may not be concrete.
+            t->body = m_node->prog_type;
+            pType t1 = std::static_pointer_cast<Type>(t);
+            m_node->prog_type.swap(t1);
+
+            symbol_table->pop_type_scope();
+        }
+
+        // Will push type scope.
+        void process_quantifiers(const std::vector<std::pair<pSymbol, Ptr<TypeNode>>>& quantifiers, const Ptr<UniversalType>& t) {
+            for (const auto& q : quantifiers) {
                 if (!q.second) continue;
 
                 process_type(q.second);
                 if (!q.second->prog_type->qualifies_interface()) {
-                    StringOutputStream s; s << "Not an interface: "; q.second->prog_type->print(s);
-                    q.second->get_info().throw_exception(s.str());
+                    q.second->get_info().throw_exception(StringAssembler("Not an interface: ")(*q.second->prog_type)());
                 }
             }
-
-            auto t = std::make_shared<UniversalType>();
             symbol_table->push_type_scope();
 
-            for (size_t i = 0; i < m_node->quantifiers.size(); i++) {
-                auto q = m_node->quantifiers[i];
+            for (size_t i = 0; i < quantifiers.size(); i++) {
+                auto q = quantifiers[i];
                 if (q.second) {
                     symbol_table->insert_type_var(q.first, i, q.second->prog_type);
                     t->quantifiers.push_back(q.second->prog_type);
@@ -112,13 +125,6 @@ namespace mini {
                     t->quantifiers.push_back(mytop);
                 }
             }
-
-            process_concrete_type(m_node);    // TODO in F-omega t->body may not be concrete.
-            t->body = m_node->prog_type;
-            pType t1 = std::static_pointer_cast<Type>(t);
-            m_node->prog_type.swap(t1);
-
-            symbol_table->pop_type_scope();
         }
 
         void process_expr(const Ptr<ExprNode>& m_node) {
@@ -131,6 +137,7 @@ namespace mini {
             case AST::ARRAY: process_array(ast_cast<ArrayNode>(m_node)); break;
             case AST::FUNCALL: process_funcall(ast_cast<FunCallNode>(m_node)); break;
             case AST::GETFIELD: process_getfield(ast_cast<GetFieldNode>(m_node)); break;
+            case AST::NEW: process_new(ast_cast<NewNode>(m_node)); break;
             case AST::TYPEAPPL: process_typeappl(ast_cast<TypeApplNode>(m_node)); break;
             case AST::LAMBDA: process_lambda(ast_cast<LambdaNode>(m_node)); break;
             default:
@@ -282,9 +289,7 @@ namespace mini {
             auto func_type = func_type_1->as<PrimitiveType>();
 
             if (func_type->args.size() - 1 != m_node->args.size()) {
-                StringOutputStream soutput;
-                soutput << "Expect " << func_type->args.size() - 1 << " args, got " << m_node->args.size();
-                m_node->get_info().throw_exception(soutput.buffer);
+                m_node->get_info().throw_exception(StringAssembler("Expect ")(func_type->args.size() - 1)(" args, got ")(m_node->args.size())());
             }
             for (size_t i = 0; i < m_node->args.size(); i++) {
                 process_expr(m_node->args[i]);
@@ -292,6 +297,42 @@ namespace mini {
             }
             m_node->prog_type = func_type->args.back();
 
+        }
+
+        void process_new(NewNode* m_node) {
+            auto constructor_ref = symbol_table->find_var(SymbolTable::constructor_name(m_node->symbol->name), m_node->symbol->get_info());
+            if (!constructor_ref) m_node->symbol->get_info().throw_exception("Type constructor not defined: " + m_node->symbol->name);
+            const auto& [type_ref, stack_id] = symbol_table->find_type(m_node->symbol->name, m_node->symbol->get_info());
+            if (!type_ref) m_node->symbol->get_info().throw_exception("Type not defined: " + m_node->symbol->name);
+            if (!type_ref->is_object()) m_node->symbol->get_info().throw_exception("Not an object type: " + m_node->symbol->name);
+            m_node->type_ref = type_ref->as<ObjectTypeMetaData>();
+            m_node->constructor_ref = constructor_ref;
+
+            std::vector<pType> type_args;
+            for (const auto& q : m_node->type_args) { process_type(q); type_args.push_back(q->prog_type); }
+
+            /* Strictly speaking, in the presence of type constructors, the constructor should have type
+            new_A : <X>.A(X)->(<Y>.Y->A(X)) where Y is argument types. So when it applies to new A the type parameter should also be applied.
+            new A<X,Y> : new_A<X>(self)<Y>(others).
+            */
+
+            // TODO F-omega: if constructor_ref is universal, it is initiated by amount of type_args it needed.
+            auto constructor_type = constructor_ref->prog_type;
+
+            // This is a call to base class constructor
+            if (m_node->self_arg) { // new_B<...>(self)
+                process_var(m_node->self_arg.get());
+                match_type(constructor_type->as<PrimitiveType>()->args[0], m_node->self_arg->prog_type, m_node->get_info());
+            }// otherwise we will new an object
+            
+            auto& arg1 = constructor_type->as<PrimitiveType>()->args[1];
+            if (arg1->is_universal()) {
+                // F-omega: this is the remaining args.
+                m_node->prog_type = arg1->as<UniversalType>()->instanitiate(type_args, m_node->get_info());
+            }
+            else {
+                m_node->prog_type = arg1;
+            }
         }
 
         void process_getfield(GetFieldNode* m_node) {
@@ -306,16 +347,16 @@ namespace mini {
             if (lhs_type->is_struct()) {
                 fields = &(lhs_type->as<StructType>()->fields);
             }
+            else if (lhs_type->is_object()) {
+                fields = &(lhs_type->as<ObjectType>()->ref->fields);
+            }
             else {
-                // TODO implement object type
                 m_node->lhs->get_info().throw_exception("Struct/class required");
             }
 
             auto f = fields->find(m_node->field->get_name());
             if (f == fields->end()) {
-                StringOutputStream soutput;
-                soutput << "Type '" << *lhs_type << "' does not have field '" << m_node->field->get_name() << "'";
-                m_node->field->get_info().throw_exception(soutput.buffer);
+                m_node->field->get_info().throw_exception(StringAssembler("Type '")(*lhs_type)("' does not have field '")(m_node->field->get_name())("'")());
             }
             m_node->set_prog_type(f->second);
         }
@@ -323,31 +364,7 @@ namespace mini {
         void process_lambda(LambdaNode* m_node) {
 
             auto t = std::make_shared<UniversalType>();
-            if (!m_node->quantifiers.empty()) {
-                for (const auto& q : m_node->quantifiers) {
-                    if (!q.second) continue;
-
-                    process_type(q.second);
-                    if (!q.second->prog_type->qualifies_interface()) {
-                        StringOutputStream s; s << "Not an interface: "; q.second->prog_type->print(s);
-                        q.second->get_info().throw_exception(s.str());
-                    }
-                }
-                symbol_table->push_type_scope();
-
-                for (size_t i = 0; i < m_node->quantifiers.size(); i++) {
-                    auto q = m_node->quantifiers[i];
-                    if (q.second) {
-                        symbol_table->insert_type_var(q.first, i, q.second->prog_type);
-                        t->quantifiers.push_back(q.second->prog_type);
-                    }
-                    else {
-                        auto mytop = std::make_shared<PrimitiveType>(symbol_table->find_type("@Addressable"));
-                        symbol_table->insert_type_var(q.first, i, mytop);
-                        t->quantifiers.push_back(mytop);
-                    }
-                }
-            }
+            if (!m_node->quantifiers.empty()) process_quantifiers(m_node->quantifiers, t);
 
             std::vector<pType> args_type;
 
@@ -409,6 +426,7 @@ namespace mini {
 
             m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("function"), args_type);
 
+            // if there are quantifiers, then it is a universal type
             if (!m_node->quantifiers.empty()) {
                 t->body = m_node->prog_type;
                 auto t1 = std::static_pointer_cast<Type>(t);
@@ -499,7 +517,6 @@ namespace mini {
             for (auto& p : m_node->parents) {
                 const auto& [parent_t, stack_id] = symbol_table->find_type(p->get_name(), p->get_info());
                 if (parent_t && parent_t->is_interface()) {
-                    // TODO "self"
                     for (const auto& f : parent_t->as<InterfaceTypeMetaData>()->actual_type->as<StructType>()->fields) {
                         const auto& [iter, succ] = t->fields.insert(f);
                         if (!succ && !f.second->equals(iter->second.get())) {
@@ -525,18 +542,118 @@ namespace mini {
 
         void process_class(ClassNode* m_node) {
 
+            const auto& [r, stack_id] = symbol_table->find_type(m_node->symbol->get_name(), m_node->symbol->get_info());
+            if (!r) {
+                throw std::runtime_error("Class not registered in the first pass");
+            }
+            else if (!r->is_object()) {
+                m_node->symbol->get_info().throw_exception("Object redefinition");   // normally it should not happen
+            }
+            auto ref = r->as<ObjectTypeMetaData>();
+            m_node->ref = ref;
 
-            // resolve inheritance and implementation first.
-
-            for (const auto child : m_node->members) {
-
-                // get field info, add into class type information (exclude static)
-                // if it's a variable, also do the same type check as global var.
-                // if it's a function, do the same type check and lambda function as global function.
-
+            // Inheritance
+            const ObjectTypeMetaData* base_ref;
+            if (m_node->base) {
+                process_type(m_node->base);
+                auto base_type = m_node->base->prog_type;
+                if (!base_type->is_object()) {
+                    m_node->base->get_info().throw_exception(StringAssembler("Inherit a non-object type")(*base_type)());
+                }
+                base_ref = base_type->as<ObjectType>()->ref;
+                ref->fields = base_ref->fields;
+                ref->field_names = base_ref->field_names;
+                ref->virtual_fields = base_ref->virtual_fields;
+                ref->base = base_type;
+            }
+            else {
+                base_ref = NULL;
+                ref->base = std::make_shared<PrimitiveType>(symbol_table->find_type("object"));
             }
 
-            // remove class AST from list.
+            for (const auto& [member, meta] : m_node->members) {
+                
+                const auto& member_name = member->symbol->get_name();
+                process_type(member->vtype);
+
+                if (ref->fields.find(member_name) != ref->fields.end()) {
+
+                    // virtual field.
+                    if (base_ref && base_ref->virtual_fields.find(member_name) != base_ref->virtual_fields.end()) {
+                        match_type(base_ref->fields.find(member_name)->second, member->vtype->prog_type, member->get_info());
+                    }
+                    else {
+                        member->get_info().throw_exception("Field redefinition: " + member_name);
+                    }
+                }
+                else {
+                    ref->fields.insert({ member_name, member->vtype->prog_type });
+                    ref->field_names.push_back(member_name);
+                }
+
+                if (meta.is_virtual) {
+                    ref->virtual_fields.insert(member_name);
+                }
+            }
+
+            if (!m_node->constructor) { // fake an empty constructor
+                m_node->constructor = std::make_shared<LambdaNode>();
+                m_node->constructor->set_info(m_node->get_info());
+            }
+            
+            // last statement must be self
+            auto self_node = std::make_shared<VarNode>(
+                std::make_shared<Symbol>("self", m_node->constructor->get_info()));
+            self_node->set_info(m_node->constructor->get_info());
+            m_node->constructor->statements.push_back(self_node);
+
+            // \<X>.self:A(X) -> {\<Y>.(...)->{} }
+            auto constructor_node = std::make_shared<LambdaNode>();     // contructor as a global function;
+            auto self_type_node = std::make_shared<TypeNode>();         // self must have same type as A
+            constructor_node->set_info(m_node->constructor->get_info());
+            self_type_node->symbol = m_node->symbol;
+            self_type_node->set_info(m_node->constructor->get_info());
+
+            // TODO F-omega constructor_node and self_type_node will have quantifier.
+            constructor_node->args.push_back({
+                std::make_shared<Symbol>("self", m_node->get_info()),
+                self_type_node
+                });
+            constructor_node->statements.push_back(
+                std::static_pointer_cast<AST>(m_node->constructor)
+            );
+
+            /* Recursive Functions: Fake a type */
+            // F-omega: may be universal
+            auto constructor_type = std::make_shared<PrimitiveType>(symbol_table->find_type("function"));
+            auto self_type = std::make_shared<ObjectType>(ref);
+
+            constructor_type->args.push_back(self_type);
+            bool has_quantifiers = !m_node->constructor->quantifiers.empty();
+            auto ut = std::make_shared<UniversalType>();
+            auto ft = std::make_shared<PrimitiveType>(symbol_table->find_type("function"));
+            if (has_quantifiers) process_quantifiers(m_node->constructor->quantifiers, ut);
+            for (const auto& a : m_node->constructor->args) { process_type(a.second); ft->args.push_back(a.second->prog_type); }
+            ft->args.push_back(self_type);
+            if (has_quantifiers) { symbol_table->pop_type_scope(); ut->body = ft; constructor_type->args.push_back(ut); }
+            else constructor_type->args.push_back(ft);
+
+            m_node->constructor_ref = symbol_table->insert_constructor(m_node->symbol, ref, constructor_type);
+
+            process_lambda(constructor_node.get());
+            match_type(constructor_node->prog_type, constructor_type, m_node->get_info());  // Checking
+            m_node->constructor.swap(constructor_node);  // NOTE now the m_node->constructor is changed to the global one with signature A->((...)->A)
+
+            // Interface checking
+            for (const auto& p : m_node->interfaces) {
+                process_type(p); 
+                if (!p->prog_type->qualifies_interface()) {
+                    p->get_info().throw_exception("Implements a non-interface");
+                }
+                if (!p->prog_type->is_interface_of(ObjectType(ref).member_unfold().get())) {
+                    p->get_info().throw_exception(StringAssembler("Interface not match: ")(*p->prog_type)());
+                };
+            }
         }
 
         // If lhs >= rhs return 1, if lhs < rhs return 0. Raises exception if not comparable.
@@ -546,9 +663,7 @@ namespace mini {
             switch (result)
             {
             case Type::Ordering::UNCOMPARABLE: {
-                StringOutputStream soutput;
-                soutput << "Uncomparable type: " << *lhs << " and " << *rhs;
-                info.throw_exception(soutput.buffer);
+                info.throw_exception(StringAssembler("Uncomparable type: ")(*lhs)(" and ")(*rhs)());
                 return 0;
             }
             case Type::Ordering::GREATER: return 1;
@@ -559,20 +674,8 @@ namespace mini {
         }
 
         // similar as match_type, except allowing contravariant assign with struct => class
-        unsigned match_type_in_decl(const pType& lhs, const pType& rhs, const SymbolInfo& info) {
-            if (lhs->is_object() && rhs->is_struct()) {
-                auto a = StructType::field_compatible(lhs->as<ObjectType>()->fields, rhs->as<StructType>()->fields);
-                if (a == Type::Ordering::EQUAL || a == Type::Ordering::GREATER) {
-                    return 2;
-                }
-                else {
-                    info.throw_exception("All fields in RHS must match");
-                    return 0;
-                }
-            }
-            else {
-                return match_type(lhs, rhs, info);
-            }
+        unsigned match_type_in_decl(const pType& lhs, const pType& rhs, const SymbolInfo& info) {    
+            return match_type(lhs, rhs, info);
         }
 
     private:

@@ -42,11 +42,11 @@ pType Type::erasure(ConstTypedefRef ref_addressable)const {
         return std::make_shared<StructType>(newfields);
     }
     case Type::Type_t::OBJECT: {
-        // TODO object
+        // TODO advanced
         return std::make_shared<ObjectType>(as<ObjectType>()->ref);
     }
     case Type::Type_t::VARIABLE: {
-        return std::make_shared<PrimitiveType>(ref_addressable); // Not sure if this has any problem
+        return std::make_shared<PrimitiveType>(ref_addressable->as<PrimitiveTypeMetaData>()); // Not sure if this has any problem
     }
     case Type::Type_t::UNIVERSAL: {
         return as<UniversalType>()->body->erasure(ref_addressable);
@@ -121,6 +121,19 @@ Type::Ordering PrimitiveType::less(const Type* rhs)const {
     return rhs->is_kind0() ? Ordering::LESS : Ordering::UNCOMPARABLE;
 }
 
+bool StructType::is_interface_of(const Type* rhs) const {
+    if (rhs->is_bottom()) return true;
+    else if (rhs->is_struct()) return field_compatible(fields, rhs->as<StructType>()->fields) != Ordering::UNCOMPARABLE;
+    else if (rhs->is_object()) return field_compatible(fields, rhs->as<ObjectType>()->ref->fields) != Ordering::UNCOMPARABLE;
+    else if (rhs->is_recursive()) {     // recursive: unfold one time.
+        auto rrhs = rhs->as<RecursiveType>();
+        if (rrhs->is_struct() || rrhs->is_object()) {
+            return is_interface_of(rrhs->unfold().get());
+        }
+        return false;
+    }
+}
+
 Type::Ordering StructType::field_compatible(const std::unordered_map<std::string, pType>& lhs_fields, const std::unordered_map<std::string, pType>& rhs_fields) {
 
     bool is_equal = true;
@@ -185,25 +198,6 @@ size_t StructType::Hasher::_hash(const Type* t)const {
     }
 }
 
-Type::Ordering ObjectType::is_base_of(const ObjectType* rhs)const {
-
-    if (ref == rhs->ref) {
-        return equals(rhs) ? Ordering::EQUAL : Ordering::UNCOMPARABLE;
-    }
-    else {
-        /*
-        auto m_rhs = rhs;
-        while (m_rhs->ref->parent != NULL) {
-            
-            // TODO m_rhs => parent
-
-            if (equals(m_rhs)) return Ordering::GREATER;
-        }*/
-
-        return Ordering::UNCOMPARABLE;
-    }
-}
-
 pType UniversalType::evaluate(const pType& target, const std::vector<pType>& args, unsigned stack_base, const SymbolInfo& info)
 {
     // This is basically induction in STLC
@@ -224,8 +218,8 @@ pType UniversalType::evaluate(const pType& target, const std::vector<pType>& arg
         return std::make_shared<PrimitiveType>(target->as<PrimitiveType>()->ref, new_args);
     }
     case Type::Type_t::OBJECT: {
-        // TODO implement ObjectType
-        return NULL;
+        // TODO advanced type
+        return target;
     }
     case Type::Type_t::STRUCT: {
         std::unordered_map<std::string, pType> new_fields;

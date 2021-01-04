@@ -50,14 +50,14 @@ namespace mini {
         // Generate the builtin functions to the symbol table.
         static void generate_builtin_functions(SymbolTable& symbol_table) {
             for (const auto& f : builtin_function_info) {
-                if (f.name == "aget") {    // special cases of universal function
+                if (f.name == "@get") {    // special cases of universal function
                     
                     using utb = UniversalTypeBuilder;
                     using tb = PrimitiveTypeBuilder;
                     using vtb = TypeVariableBuilder;
 
                     symbol_table.insert_var(std::make_shared<Symbol>(f.name), VarMetaData::GLOBAL,
-                        utb()("X")(tb("function")(tb("array")(vtb("X")))("int")(vtb("X"))).build(symbol_table)
+                        utb()("X")(tb("function")("@Addressable")("int")(vtb("X"))).build(symbol_table)
                     );
                 }
                 else {

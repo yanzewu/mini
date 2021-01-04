@@ -32,7 +32,9 @@ namespace mini {
 
         void process_funcall(const FunCallNode* node);
 
-        void process_getfield(const GetFieldNode* node);
+        void process_getfield(const GetFieldNode* node, const std::shared_ptr<ExprNode>& assignment_expr);
+
+        void process_new(const NewNode* node);
 
         void process_let(const LetNode* node, bool create_field);
 
@@ -77,7 +79,7 @@ namespace mini {
             return cindex;
         }
 
-        Size_t lookup_field_offset(Size_t info_index, Size_t field_id) const {
+        Size_t lookup_field_index(Size_t info_index, Size_t field_id) const {
             return field_indices.at( (size_t(info_index) << 32) + field_id );
         }
         void insert_field_offset(Size_t info_index, Size_t field_id, Size_t field_index) {
@@ -121,7 +123,7 @@ namespace mini {
                 )->as<ClassLayout>()->info_index;
             case Type::Type_t::OBJECT:
                 return irprog->fetch_constant(
-                    type_addr.at(tr->as<ObjectType>()->ref->as<ObjectTypeMetaData>()->index)
+                    type_addr.at(tr->as<ObjectType>()->ref->index)
                 )->as<ClassLayout>()->info_index;
             case Type::Type_t::VARIABLE: 
                 return type_addr.at(BuiltinSymbolGenerator::builtin_type_index(tr->erased_primitive_type()));

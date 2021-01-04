@@ -135,6 +135,26 @@ namespace mini {
         }
     };
 
+
+    class StringAssembler {
+    public:
+
+        StringOutputStream ostream;
+
+        StringAssembler() {}
+        StringAssembler(const std::string& s) {
+            ostream << s;
+        }
+
+        template<class T>
+        StringAssembler& operator()(const T& obj) {
+            ostream << obj;
+            return *this;
+        }
+        const std::string& operator()() {
+            return ostream.str();
+        }
+    };
 }
 
 #endif

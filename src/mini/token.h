@@ -42,7 +42,9 @@ namespace mini {
 
         IMPLEMENTS = 110,
         EXTENDS = 111,
+        NEW = 112,
         STATIC = 113,
+        VIRTUAL = 114,
 
     };
 

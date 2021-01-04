@@ -28,6 +28,7 @@ namespace mini {
             OBJECT = 2,
             VARIABLE = 3,
             UNIVERSAL = 4,
+            RECURSIVE = 5,
         } _type;    // this has nothing to do with any typing...
 
         virtual unsigned kind()const {
@@ -39,6 +40,7 @@ namespace mini {
         bool is_struct()const { return _type == Type_t::STRUCT; }
         bool is_object()const { return _type == Type_t::OBJECT; }
         bool is_universal_variable()const { return _type == Type_t::VARIABLE; }
+        bool is_recursive()const { return _type == Type_t::RECURSIVE; }
         // is a non universal type with kind *
         bool is_concrete()const { 
             return _type == Type_t::PRIMITIVE || _type == Type_t::STRUCT || _type == Type_t::OBJECT; }
@@ -119,34 +121,17 @@ namespace mini {
         return a.print(os);
     }
 
-    // Non-universal type with kind *
-    class ConcreteType : public Type {
-    public:
-
-        /* Notice this is different from TypeMetaData (or Typedef) --
-        the latter is a symbol and can be referred from the symbol table,
-        and should be managed centrally (use reference/pointer);
-        Type is only an instance and is designed to be arbitarily copyable.*/
-
-        // 4 categories: PrimitiveType; StructType; ObjectType; UniversalTypeVariable;
-
-        ConstTypedefRef ref;    // reference of itself (singlet) or leftest (composite)
-        
-        ConcreteType() : ref(NULL) {}
-        ConcreteType(const TypeMetaData* ref_, Type_t _type) : ref(ref_), Type(_type) {}
- 
-    };
-
     // Predefined types (top,bottom,nil,bool,char,int,float,list,function,tuple,array,object,variant)
-    class PrimitiveType : public ConcreteType {
+    class PrimitiveType : public Type {
     public:
         using Primitive_Type_t = PrimitiveTypeMetaData::Primitive_Type_t;
 
         std::vector<pType> args;
+        const PrimitiveTypeMetaData* ref;
 
-        explicit PrimitiveType(ConstTypedefRef ref) : ConcreteType(ref, Type_t::PRIMITIVE) {}
-        PrimitiveType(ConstTypedefRef ref_, const std::vector<pType>& args) : 
-            ConcreteType(ref_, Type_t::PRIMITIVE), args(args) {}
+        explicit PrimitiveType(const PrimitiveTypeMetaData* ref) : Type(Type_t::PRIMITIVE), ref(ref) {}
+        PrimitiveType(const PrimitiveTypeMetaData* ref, const std::vector<pType>& args) :
+            Type(Type_t::PRIMITIVE), ref(ref), args(args) {}
 
         // the name of type
         Primitive_Type_t type_name()const {
@@ -182,7 +167,7 @@ namespace mini {
         }
     };
 
-    class StructType : public ConcreteType {
+    class StructType : public Type {
     public:
         
         struct Identifier {
@@ -204,20 +189,15 @@ namespace mini {
 
         std::unordered_map<std::string, pType> fields;
 
-        StructType() : ConcreteType(NULL, Type_t::STRUCT) {}
+        StructType() : Type(Type_t::STRUCT) {}
         explicit StructType(const std::unordered_map<std::string, pType>& fields) : 
-            ConcreteType(NULL, Type_t::STRUCT), fields(fields) {}
+            Type(Type_t::STRUCT), fields(fields) {}
 
         bool equals(const Type* rhs)const override {
             return this->_type == rhs->_type && field_equal(fields, rhs->as<StructType>()->fields);
         }
 
-        bool is_interface_of(const Type* rhs)const override {
-            if (rhs->is_bottom()) return true;
-
-            return type_matches(rhs) ?
-                field_compatible(fields, rhs->as<StructType>()->fields) != Ordering::UNCOMPARABLE : false;
-        }
+        bool is_interface_of(const Type* rhs)const override;
 
         Ordering greater(const Type* rhs)const override {
             if (type_matches(rhs) && fields.size() == rhs->as<StructType>()->fields.size()) {
@@ -238,24 +218,45 @@ namespace mini {
     };
 
 
-    class ObjectType : public ConcreteType {
+    class ObjectType : public Type {
     public:
 
-        std::unordered_map<std::string, pType> fields;
-
-        explicit ObjectType(ConstTypedefRef ref) : ConcreteType(ref, Type_t::OBJECT) {}
+        const ObjectTypeMetaData* ref;
+        
+        explicit ObjectType(const ObjectTypeMetaData* ref) : Type(Type_t::OBJECT), ref(ref) {}
 
         bool equals(const Type* rhs)const final {
-            return type_matches(rhs) && ref == rhs->as<ObjectType>()->ref;
+            return type_matches(rhs) && _index_equal(rhs->as<ObjectType>()->ref);
+            // TODO F-omega may need to compare args
         }
 
         Ordering greater(const Type* rhs)const final {
-            return type_matches(rhs) ? is_base_of(rhs->as<ObjectType>()) : Ordering::UNCOMPARABLE;
+            if (!type_matches(rhs)) return Ordering::UNCOMPARABLE;
+            if (equals(rhs)) return Ordering::EQUAL;
+            if (_index_greater(rhs->as<ObjectType>()->ref)) return Ordering::GREATER;
+            return Ordering::UNCOMPARABLE;
         }
 
-        Ordering is_base_of(const ObjectType* rhs)const;
-
         OutputStream& print(OutputStream& os)const final;
+
+        pType member_unfold()const {
+            return std::make_shared<StructType>(ref->fields);
+        }
+
+    protected:
+        bool _index_equal(const ObjectTypeMetaData* rhs)const {
+            return ref->index == rhs->index;
+        }
+        bool _index_greater(const ObjectTypeMetaData* rhs)const {
+            if (!rhs) return false;
+            else if (ref->index == rhs->index) {
+                return true;
+            }
+            else {
+                if (!rhs->base->is_object()) return false;
+                return _index_greater(rhs->base->as<ObjectType>()->ref);
+            }
+        }
     };
 
     class UniversalTypeVariable : public Type {
@@ -342,6 +343,34 @@ namespace mini {
     private:
 
         static pType evaluate(const pType& target, const std::vector<pType>& args, unsigned stack_base, const SymbolInfo& info);
+    };
+
+    class RecursiveTypeVariable : public Type {
+        unsigned stack_id;    /* Recursive stack ID */
+        unsigned arg_id;
+    };
+
+    class RecursiveType : public Type {
+    public:
+        size_t nargs;
+        pType body;
+
+        RecursiveType() : Type(Type_t::RECURSIVE) {}
+
+        bool equals(const Type* rhs)const {
+            if (rhs->is_recursive()){
+                return nargs == rhs->as<RecursiveType>()->nargs && body->equals(rhs->as<RecursiveType>()->body.get());
+            }
+            return false;
+        }
+
+        Ordering greator(const Type* rhs);
+
+        pType unfold()const {
+            return nullptr;
+        }
+
+        OutputStream& print(OutputStream& os)const final;
     };
 
 }

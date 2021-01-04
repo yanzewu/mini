@@ -10,6 +10,8 @@ let dot = \<X,Y,Z>(f:function(X,Y), g:function(Y,Z))->{
 let flip = \<X,Y,Z>(f:function(X,Y,Z))->{
     \(y:Y,x:X)->f(x,y)
 };
+let fst = \<X,Y>(a:tuple(X,Y))->@get<X>(a, 0);
+let snd = \<X,Y>(a:tuple(X,Y))->@get<Y>(a, 1);
 let curry = \<X,Y,Z>(f:function(X,Y,Z))->{
     \(x:X)->{\(y:Y)->f(x,y)}
 };
@@ -18,4 +20,39 @@ let uncurry = \<X,Y,Z>(f:function(X,function(Y,Z)))->{
 };
 let error = @throw;
 let undefined = @throw("undefined");
+let fix:forall<X>.function(function(X,X), function(X,X));
+set fix = \<X>(f:function(X,X))->{\(x:X)->f(fix<X>(f)(x))};
+
+let aget = \<X>(a:array(X), i:int)->@get<X>(a, i);
+let aset = \<X>(a:array(X), i:int, v:X)->@aseta(a, i, v);
+
+class Nil {};
+class Bool {
+    __value:int,
+    equals:function(Bool, Bool),
+    new(value:int)->{
+        set self.__value = @nei(value, 0),  # !=0 => 1
+        set self.equals = \rhs:Bool->
+            new Bool(@eqi(rhs.__value, self.__value))
+    }
+};
+
+let True = new Bool(1);
+let False = new Bool(0);
+
+let sel = \<X>(cond:Bool, pass:X, fail:X)->@get<X>([fail, pass], cond.__value);
+let sand = \(lhs:function(Bool), rhs:function(Bool))->
+    sel<function(Bool)>(lhs(), rhs, \()->False)();
+let sor = \(lhs:function(Bool), rhs:function(Bool))->
+    sel<function(Bool)>(lhs(), \()->True, rhs)();
+
+# More clean using pattern matching
+let until:forall<X>.function(function(X,Bool), function(X,X), function(X,X));
+set until = \<X>(p:function(X,Bool), f:function(X,X))->{
+    \x:X->sel<function(X,X)>(
+        p(x), 
+        id<X>, 
+        until<X>(p, \y:X->f(y)))
+    (x)
+};
 

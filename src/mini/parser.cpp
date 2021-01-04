@@ -130,6 +130,30 @@ Ptr<ExprNode> mini::Parser::parse_expr() {
             }
             break;
         }
+        case Keyword::NEW:
+        case Keyword::EXTENDS: {
+            auto m_node = std::make_shared<NewNode>(get_id_inc());
+            m_node->set_info(get_last_info());
+
+            if (keyword == Keyword::EXTENDS) {  // distinguish call to base/call to self.
+                m_node->self_arg = std::make_shared<VarNode>(std::make_shared<Symbol>("self", get_last_info()));
+                m_node->self_arg->set_info(get_last_info());
+            }
+            
+            // if there are quantifier, will add it first so that transforming will be easier.
+            if (test_keyword_inc(Keyword::LANGLE)) {
+                while (1) {
+                    m_node->type_args.push_back(parse_type());
+                    if (test_keyword_inc(Keyword::COMMA)) continue;
+                    else if (test_keyword_inc(Keyword::RANGLE)) break;
+                    else {
+                        throw_cur_token("`,' or `>' expected");
+                    }
+                }
+            }
+            std::static_pointer_cast<ExprNode>(m_node).swap(prefix);
+            break;
+        }
 
         default:
             cur_token--;
@@ -226,7 +250,7 @@ Ptr<ArrayNode> mini::Parser::parse_array_wb() {
     return m_node;
 }
 
-Ptr<LambdaNode> mini::Parser::parse_lambda_wb() {
+Ptr<LambdaNode> mini::Parser::parse_lambda_wb(bool is_constructor) {
     auto m_node = std::make_shared<LambdaNode>();
     m_node->set_info(get_last_info());
 
@@ -257,6 +281,11 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb() {
             }
         }
     }
+    if (test_keyword(Keyword::EXTENDS)) {   // will leave "extends" to parse_expr
+        auto m_extend_supernode = parse_expr();
+        m_node->statements.push_back(m_extend_supernode);
+    }
+
     match_keyword_inc(Keyword::ARROW);
     // do resolve ambiguity with struct here
     if (test_keyword_inc(Keyword::LCURLY)) {
@@ -286,7 +315,7 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb() {
         m_node->statements.push_back(parse_expr());
     }
 
-    if (test_keyword_inc(Keyword::COLON)) { // greedy match
+    if (!is_constructor && test_keyword_inc(Keyword::COLON)) { // greedy match
         m_node->ret_type = parse_type();
     }
 
@@ -392,7 +421,8 @@ Ptr<ClassNode> mini::Parser::parse_class_wb() {
 
     while (1) {
         if (test_keyword_inc(EXTENDS)) {
-            m_node->parents.push_back(parse_type());
+            if (m_node->base) get_last_info().throw_exception("Base class is already defined");
+            m_node->base = parse_type();
         }
         else if (test_keyword_inc(IMPLEMENTS)) {
             m_node->interfaces.push_back(parse_type());
@@ -405,24 +435,16 @@ Ptr<ClassNode> mini::Parser::parse_class_wb() {
     match_keyword_inc(Keyword::LCURLY);
     if (!test_keyword_inc(Keyword::RCURLY)) {
         while (1) {
-            ClassNode::ClassMemberMeta m_meta;
-            if (test_keyword_inc(Keyword::DEF)) {   // def must be static
-                m_meta.is_static = true;
-                m_node->members.push_back({
-                    parse_func_def_wb(),
-                    m_meta
-                    });
+            if (test_keyword_inc(Keyword::NEW)) { // constructor
+                if (m_node->constructor) m_node->constructor->get_info().throw_exception("Constructor redefinition");
+                else m_node->constructor = parse_lambda_wb(true);
             }
             else {
-                if (test_keyword_inc(Keyword::STATIC)) {
-                    m_meta.is_static = true;
-                }
-                else {
-                    m_meta.is_static = false;
-                }
-                m_node->members.push_back({ parse_let_wb(false), m_meta });
+                ClassNode::ClassMemberMeta m_meta;
+                if (test_keyword_inc(Keyword::VIRTUAL)) m_meta.is_virtual = true;
+                auto m_member = parse_let_field_wb();
+                m_node->members.push_back({ m_member, m_meta });
             }
-
             if (test_keyword_inc(Keyword::COMMA)) continue;
             else if (test_keyword_inc(Keyword::RCURLY)) break;
             else {
@@ -444,12 +466,7 @@ Ptr<InterfaceNode> mini::Parser::parse_interface_wb() {
     match_keyword_inc(Keyword::LCURLY);
     if (!test_keyword(Keyword::RCURLY)) {
         while (1) {
-            auto m_member = std::make_shared<LetNode>();
-            m_member->symbol = get_id_inc();
-            m_member->set_info(get_last_info());
-            match_keyword_inc(Keyword::COLON);
-            m_member->vtype = parse_type();
-            m_node->add_member(m_member);
+            m_node->add_member(parse_let_field_wb());
 
             if (test_keyword_inc(Keyword::COMMA)) continue;
             else if (test_keyword_inc(Keyword::RCURLY)) break;
@@ -460,6 +477,16 @@ Ptr<InterfaceNode> mini::Parser::parse_interface_wb() {
     }
 
     return m_node;
+}
+
+Ptr<LetNode> mini::Parser::parse_let_field_wb()
+{
+    auto m_member = std::make_shared<LetNode>();
+    m_member->symbol = get_id_inc();
+    m_member->set_info(get_last_info());
+    match_keyword_inc(Keyword::COLON);
+    m_member->vtype = parse_type();
+    return m_member;
 }
 
 Ptr<ImportNode> mini::Parser::parse_import_wb() {

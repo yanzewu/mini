@@ -4,6 +4,9 @@
 #include "symbol.h"
 #include "defines.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 namespace mini {
 
     // Metadata of a Type
@@ -110,7 +113,12 @@ namespace mini {
     class ObjectTypeMetaData: public TypeMetaData {
     public:
         Index_t index = 0;      // Defined index of custom class
-        unsigned args_count = 0;
+        std::vector<std::shared_ptr<Type>> quantifiers;
+
+        std::shared_ptr<Type> base;
+        std::unordered_map<std::string, std::shared_ptr<Type>> fields;
+        std::unordered_set<std::string> virtual_fields;
+        std::vector<std::string> field_names;
 
         // (F-omega) constraints on args
 
