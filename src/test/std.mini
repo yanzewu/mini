@@ -16,12 +16,10 @@ let curry = \<X,Y,Z>(f:function(X,Y,Z))->{
     \(x:X)->{\(y:Y)->f(x,y)}
 };
 let uncurry = \<X,Y,Z>(f:function(X,function(Y,Z)))->{
-    \(x:X,y:Y,z:Z)->f(x)(y)
+    \(x:X,y:Y)->f(x)(y)
 };
 let error = @throw;
-let undefined = @throw("undefined");
-let fix:forall<X>.function(function(X,X), function(X,X));
-set fix = \<X>(f:function(X,X))->{\(x:X)->f(fix<X>(f)(x))};
+let undefined = \()->@throw("undefined");
 
 let aget = \<X>(a:array(X), i:int)->@get<X>(a, i);
 let aset = \<X>(a:array(X), i:int, v:X)->@set<X>(a, i, v);
@@ -39,6 +37,10 @@ class Bool {
 
 let True = new Bool(1);
 let False = new Bool(0);
+let and = \(lhs:Bool, rhs:Bool) -> new Bool(@and(lhs.__value, rhs.__value));
+let or = \(lhs:Bool, rhs:Bool) -> new Bool(@or(lhs.__value, rhs.__value));
+let xor = \(lhs:Bool, rhs:Bool) -> new Bool(@xor(lhs.__value, rhs.__value));
+let not = \b:Bool -> new Bool(@not(b.__value));
 
 let sel = \<X>(cond:Bool, pass:X, fail:X)->@get<X>([fail, pass], cond.__value);
 let sand = \(lhs:function(Bool), rhs:function(Bool))->
@@ -46,13 +48,26 @@ let sand = \(lhs:function(Bool), rhs:function(Bool))->
 let sor = \(lhs:function(Bool), rhs:function(Bool))->
     sel<function(Bool)>(lhs(), \()->True, rhs)();
 
-# More clean using pattern matching
-let until:forall<X>.function(function(X,Bool), function(X,X), function(X,X));
-set until = \<X>(p:function(X,Bool), f:function(X,X))->{
-    \x:X->sel<function(X,X)>(
-        p(x), 
-        id<X>, 
-        until<X>(p, \y:X->f(y)))
-    (x)
+# Cleaner using pattern matching
+let fix:forall<X>.function( function(function(X,X), function(X,X)), function(X,X));
+set fix = \<X>(f:function(function(X,X), function(X,X)))->{
+    \(x:X)->f(fix<X>(f))(x)
 };
 
+let until:forall<X>.function(function(X,Bool), function(X,X), function(X,X));
+set until = \<X>(p:function(X,Bool), f:function(X,X)) -> {
+    \cur_val:X->
+        sel<function(X)>(
+            p(cur_val),
+            \()->cur_val,
+            \()->until<X>(p, f)(f(cur_val))
+        )()
+};
+
+# io
+
+let stdin = 0;
+let stdout = 1;
+let print = \s:array(char) -> @write(stdout, s);
+let input = \()-> @read(stdin, 1024, '\n');
+let printf = \(a:array(char), v:array(top))->@write(stdout, @format(a, v));

@@ -1,31 +1,33 @@
 
+import std;
+
 let passed_count:int = 0;
 let total_count:int = 0;
 
 def pass_test()->nil {
-    @print(@format("Test case %d: passed\n", [total_count])),
+    printf("Test case %d: passed. ", [total_count]),
     set passed_count = @addi(passed_count, 1),
     set total_count = @addi(total_count, 1),
     nil
 };
 
 def fail_test()->nil {
-    @print(@format("Test case %d: failed. ", [total_count])),
+    printf("Test case %d: failed. ", [total_count]),
     set total_count = @addi(total_count, 1)
 };
 
 def require(v:int, msg:array(char))->nil {
     @get<function(nil)>([
-        pass_test, 
-        \()->{fail_test(), @print(msg), @print("\n")}:nil
+        \()->{pass_test(), print(msg), print("\n")}, 
+        \()->{fail_test(), print(msg), print("\n")}
     ], 
     @eqi(v, 0)
     )()
 };
 
-def summary()->nil {
-    @print(@format("Total %d cases, %d passed, %d failed\n", 
-    [total_count, passed_count, @subi(total_count, passed_count)]))
+let summary = \()->{
+    printf("Total %d cases, %d passed, %d failed\n", 
+    [total_count, passed_count, @subi(total_count, passed_count)])
 };
 
 # Literals
@@ -43,12 +45,12 @@ let vn2:nil = ();
 
 # Let/set
 
-require(@eqi(vi1, 1), "1=1\n");
-require(@eqi(vi2, -1), "-1=-1\n");
-require(@eqf(vf1, 1.00), "1.00=1.00\n");
+require(@eqi(vi1, 1), "1=1");
+require(@eqi(vi2, -1), "-1=-1");
+require(@eqf(vf1, 1.00), "1.00=1.00");
 
 set vi2 = vi1;
-require(@eqi(vi2, vi1), "vi2=vi1\n");
+require(@eqi(vi2, vi1), "vi2=vi1");
 
 # Type conversion
 
@@ -81,8 +83,6 @@ let vf2:function(int, int);
 let vf3:function(int, top);
 set vf3 = vf2;
 
-# struct is tested in the future.
-
 # Expression: Aggresion types
 
 let vai1:array(int) = [];
@@ -102,12 +102,12 @@ let vfii2:function(int, int, int) = \(x:int, y:int)->{
 let vfi1:function(int) = \()->2:int;
 let vfi2:function(int) = \()->{vi1}:int;
 
-require(@eqi(2, vfii1(1, 1)), "1+1=2\n");
-require(@eqi(3, vfii2(3, -1)), "4-1=3\n");
-require(@eqi(2, vfi1()), "2=2\n");
-require(@eqi(1, vfi2()), "1=1\n");
+require(@eqi(2, vfii1(1, 1)), "1+1=2");
+require(@eqi(3, vfii2(3, -1)), "4-1=3");
+require(@eqi(2, vfi1()), "2=2");
+require(@eqi(1, vfi2()), "1=1");
 
-# Some library functions
+# Basic library functions
 
 require(@eqi(@addi(1, 1), 2), "add");
 require(@eqi(@subi(3, 1), 2), "sub");
@@ -124,6 +124,17 @@ require(@lti(1, 2), "<");
 require(@lei(1, 2), "<=");
 require(@gti(2, -1), ">");
 require(@gei(-1, -1), ">=");
+require(@eqf(@addf(1.0, 1.0), 2.0), "addf");
+require(@eqf(@subf(3.0, 1.0), 2.0), "subf");
+require(@eqf(@mulf(-5.0, -7.0), 35.0), "mulf");
+require(@eqf(@divf(6.0, 4.0), 1.5), "divf");
+require(@eqf(@modf(6.0, 5.0), 1.0), "modf");
+require(@eqf(@negf(5.0), -5.0), "negf");
+require(@nef(1.0, 2.0), "!=");
+require(@ltf(1.0, 2.0), "<");
+require(@lef(1.0, 2.0), "<=");
+require(@gtf(2.0, -1.0), ">");
+require(@gef(-1.0, -1.0), ">=");
 
 require(@eqi(@ageti([1,2,3], 2), 3), "ageti");
 
@@ -135,6 +146,17 @@ require(@eqi(@len(va), 12), "len");
 let s:array(char) = @format("% -+5.5f", [123.45678]);
 require(@eqi(@ctoi(@aget(s, 4)), 46), "format");
 require(@eqi(@ctoi(@aget(s, 9)), 56), "format");
+
+require(@eqi(@bool(100), 1), "bool");
+let va2 = @alloc<function(int, int)>(3);
+@set<function(int,int)>(va2, 2, @negi);
+require(@eqi(@get<function(int, int)>(va2, 2)(1), -1), "get/set");
+
+let va3_src = [1,2,3];
+let va3_dst = [4,5,6];
+@copy(va3_src, 4, 8, va3_dst, 4);
+require(@eqi(@muli(@ageti(va3_dst, 0), @muli(@ageti(va3_dst, 1), @ageti(va3_dst, 2))), 24)
+, "copy");
 
 # interfaces
 
@@ -157,58 +179,83 @@ require(@eqi(f<I0>(i0), 1), "interface");
 require(@eqi(f<I0>({a=1, b=2.0}), 1), "interface");
 require(@eqi(f<I1>({a=1, b=2.0, c=3}), 1), "interface");
 
+# classes
+
+interface I3 {
+    val2:float
+};
+
+class C1 {
+    val:int,
+    new (val:int) -> {set self.val = val}
+};
+class C2 extends C1 implements I3 {
+    val2:float,
+    new (val:int, val2:float) extends C1(val) -> {set self.val2 = val2}
+};
+
+let c1 = new C1(1);
+let c2:C1 = new C2(2, 2.0);
+let c3:C2 = new C2(3, 4.0);
+require(@eqi(c1.val, 1), "class");
+require(@eqi(c2.val, 2), "class");
+require(@eqf(c3.val2, 4.0), "class");
+
+let requireb = \(v:Bool, s:array(char))->require(v.__value, s);
+
+requireb(True, "bool");
+requireb(True.equals(True), "bool");
+requireb(True.equals(not(False)), "bool");
+
+# system F
+
 def ff(f:forall<X>.function(X,X))->forall<X>.function(X,X){
     \<X>(x:X)->f<X>(f<X>(x)):X
 };
-
 require(@eqi( ff(\<X>(x:X)->x:X)<I0>(i0).a, 1), "rank 2 function");
 
-def dot<X,Y,Z>(f:function(X,Y), g:function(Y,Z))->function(X,Z){
-    \(x:X)->g(f(x)):Z
+# system library functions
+
+requireb(id<Bool>(True), "id");
+requireb(const<Bool,Bool>(True, False), "const");
+requireb(seq<Bool,Bool>(False, True), "seq");
+requireb(dot<Bool,Bool,Bool>(not, not)(True), "dot");
+
+requireb(fst<Bool,Bool>((True, False)), "fst");
+requireb(fst<Bool,Bool>(snd<Bool,tuple(Bool,Bool)>((False, (True, False)))), "snd");
+
+let curried_and = curry<Bool,Bool,Bool>(and);
+requireb(curried_and(True)(True), "curry");
+let uncurried_and = uncurry<Bool,Bool,Bool>(curried_and);
+requireb(not(uncurried_and(True, False)), "uncurry");
+
+let arr = [False, False];
+aset<Bool>(arr, 0, True);
+requireb(aget<Bool>(arr, 0), "aget/aset");
+
+let lt_c1 = \(lhs:C1, rhs:C1)->new Bool(@lti(lhs.val, rhs.val));
+requireb(lt_c1(new C1(1), new C1(2)), "flip");
+requireb(flip<C1,C1,Bool>(lt_c1)(new C1(2), new C1(1)), "flip");
+
+requireb(sel<Bool>(False, False, True), "sel");
+
+let one_c1 = new C1(1);
+let mul_c1 = \(lhs:C1, rhs:C1)->new C1(@muli(lhs.val, rhs.val));
+let dec_c1 = \lhs:C1->new C1(@subi(lhs.val, 1));
+let equals_c1 = \(lhs:C1, rhs:C1)->new Bool(@eqi(lhs.val, rhs.val));
+
+let fact = \(cont:function(C1,C1))->{
+    \val:C1->sel<function(C1)>(
+        lt_c1(val, one_c1), 
+            \()->one_c1, 
+            \()->mul_c1(val, cont(dec_c1(val))))()
 };
+requireb(equals_c1(fix<C1>(fact)(new C1(5)), new C1(120)), "fix");
 
-interface Int {
-    val:int
-};
-def Int(val:int)->Int {{val=val}};
-def equals_int(lhs:Int, rhs:Int)->int {@eqi(lhs.val, rhs.val)};
-def add_int(lhs:Int, rhs:Int)->Int { {val=@addi(lhs.val, rhs.val)}};
-
-interface I2 {
-    p:Int
-};
-
-interface I3 {
-    q:I2
-};
-
-let dotab = dot<I3,I2,Int>(
-        \x:I3->x.q,
-        \x:I2->x.p
-      );
-
-require(equals_int(
-     dotab({q={p=Int(2)}}), Int(2)), "function product");
-
-let until:forall<X>.function(function(X,int), function(X,X), X, X);
-
-set until = \<X>(cond:function(X,int), f:function(X,X), x:X)->{
-    @get<function(X)>([
-        \()->until<X>(cond, f, f(x)):X, 
-        \()->x:X
-    ], 
-    cond(x)
-    )()
-}:X;
-
-let sum:Int = Int(0);
-
-until<Int>(
-    \x:Int->equals_int(x,Int(10)),
-    \x:Int->{ set sum = add_int(sum, x),  add_int(x, Int(1))},
-    Int(1)
-    );
-require(equals_int(sum, Int(45)), "loop");
+requireb(equals_c1(until<C1>(
+    \x:C1->lt_c1(new C1(100), x),
+    \x:C1->mul_c1(x, new C1(2))
+    )(one_c1), new C1(128)), "until");
 
 summary();
-
+@exit();

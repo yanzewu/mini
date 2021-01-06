@@ -136,7 +136,7 @@ Ptr<TypeNode> mini::Parser::parse_type() {
     match_token(Token::ID);
 
     m_node->symbol = get_id_inc();
-    if (!m_node->quantifiers.empty()) m_node->set_info(get_last_info());
+    if (m_node->quantifiers.empty()) m_node->set_info(get_last_info());
 
     if (test_keyword_inc(Keyword::LBRACKET)) {
         while (1) {
@@ -531,7 +531,9 @@ Ptr<ClassNode> mini::Parser::parse_class_wb() {
 }
 
 Ptr<InterfaceNode> mini::Parser::parse_interface_wb() {
-    auto m_node = std::make_shared<InterfaceNode>(get_id_inc());
+    auto m_node = std::make_shared<InterfaceNode>();
+    m_node->set_info(get_last_info());
+    m_node->symbol = get_id_inc();
     if (test_keyword_inc(Keyword::EXTENDS)) {
         do {
             m_node->parents.push_back(get_id_inc());

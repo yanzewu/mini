@@ -291,10 +291,10 @@ OutputStream& UniversalType::print(OutputStream& os)const {
     os << "forall<";
     if (quantifiers.size() > 0) {
         os << "$0";
-        if (!quantifiers[0]->is_top()) os << " implements " << *quantifiers[0];
-        for (size_t i = 0; i < quantifiers.size() - 1; i++) {
+        if (!quantifiers[0]->is_primitive()) os << " implements " << *quantifiers[0];
+        for (size_t i = 1; i < quantifiers.size(); i++) {
             os << ",$" << i;
-            if (!quantifiers[i]->is_top()) os << " implements " << *quantifiers[i];
+            if (!quantifiers[i]->is_primitive()) os << " implements " << *quantifiers[i];
         }
     }
     return os << ">." << *body;

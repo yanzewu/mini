@@ -546,6 +546,12 @@ void VM::close_file(int fd) {
 	file_descriptors.erase(fd);
 }
 
+std::fstream& VM::get_file(int fd) {
+	auto f = file_descriptors.find(fd);
+	runtime_assert(f != file_descriptors.end(), "Invalid file descriptor");
+	return f->second;
+}
+
 void VM::_fetch_string(Address addr, std::string& buf) {
 	const MemoryObject* obj = heap.fetch(addr);
 	runtime_assert(obj->type == MemoryObject::Type_t::ARRAY, "Array required");
@@ -590,10 +596,8 @@ void VM::call_native(int index) {
 		int src_offset = stack.pop().iarg;
 		const MemoryObject* obj_src = heap.fetch(stack.pop().aarg);
 
-		runtime_assert(src_offset < obj_src->size&& src_offset >= 0, "Source address out of range");
-		runtime_assert(dst_offset < obj_dst->size&& dst_offset >= 0, "Destination address out of range");
-		runtime_assert(src_size >= 0 &&
-			obj_dst->as<ArrayObject>()->size < dst_offset + src_size, "Segment size out of range");
+		runtime_assert(src_offset + src_size <= obj_src->size && src_offset >= 0, "Source address out of range");
+		runtime_assert(dst_offset + src_size <= obj_dst->size && dst_offset >= 0, "Destination address out of range");
 
 		// we are treating everything as char.
 		memcpy(static_cast<char*>(obj_dst->data) + dst_offset, static_cast<char*>(obj_src->data) + src_offset, src_size);

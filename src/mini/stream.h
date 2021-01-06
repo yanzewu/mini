@@ -90,7 +90,6 @@ namespace mini {
         void try_write_output() {
             if (this->buffer.size() >= buffer_size) {
                 this->flush();
-                buffer.clear();
             }
         }
     };
@@ -103,6 +102,7 @@ namespace mini {
 
         void flush() {
             std::cout << buffer;
+            buffer.clear();
         }
         ~StdoutOutputStream() {
             flush();
@@ -129,6 +129,7 @@ namespace mini {
         void flush() {
             output << buffer;
             output.flush();
+            buffer.clear();
         }
         ~FileOutputStream() {
             flush();

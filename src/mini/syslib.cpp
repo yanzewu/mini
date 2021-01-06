@@ -217,8 +217,8 @@ std::vector<BuiltinSymbolGenerator::BuiltinFunctionInfo> BuiltinSymbolGenerator:
     { "@agetf", &(*new TB("function"))(*array_float)("int")("float"), {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADIF}, {ByteCode::RETF} }},
 
     { "@aset",  &(*new TB("function"))(*array_char)("int")("char")("nil"),   {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADL, 0, 2}, {ByteCode::STOREI}, {ByteCode::RETN} }},
-    { "@aseti", &(*new TB("function"))(*array_char)("int")("int")("nil"),     {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLI, 0, 2}, {ByteCode::STOREII}, {ByteCode::RETN} }},
-    { "@asetf", &(*new TB("function"))(*array_char)("int")("float")("nil"), {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLF, 0, 2}, {ByteCode::STOREIF}, {ByteCode::RETN} }},
+    { "@aseti", &(*new TB("function"))(*array_int)("int")("int")("nil"),     {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLI, 0, 2}, {ByteCode::STOREII}, {ByteCode::RETN} }},
+    { "@asetf", &(*new TB("function"))(*array_float)("int")("float")("nil"), {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLF, 0, 2}, {ByteCode::STOREIF}, {ByteCode::RETN} }},
     
     /* Memory */
     { "@alloc", &(*new UTB())("x")( (*new TB("function"))("int")(*array_x) ),
@@ -230,11 +230,12 @@ std::vector<BuiltinSymbolGenerator::BuiltinFunctionInfo> BuiltinSymbolGenerator:
 
     /* Error */
     { "@throw", &(*new TB("function"))("top")("bottom"), {{ByteCode::LOADLA, 0, 0}, {ByteCode::THROW} }},
+    { "@exit", &(*new TB("function"))("nil"), {{ByteCode::HALT}} },
 
     /* Native */
     { "@len",   &(*new TB("function"))("@Addressable")("int"),
         {{ByteCode::LOADLA, 0, 0}, {ByteCode::CALLNATIVE, 0, (int)NativeFunction::LEN}, {ByteCode::RETI} }},
-    { "@copy",  &(*new UTB())("x")( (*new TB("function"))(*array_x)("int")("int")(*array_x)("int")("nil") ),
+    { "@copy",  &(*new TB("function"))("@Addressable")("int")("int")("@Addressable")("int")("nil") ,
         {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLI, 0, 2}, {ByteCode::LOADLA, 0, 3}, {ByteCode::LOADLI, 0, 4}, {ByteCode::CALLNATIVE, 0, (int)NativeFunction::COPY}, {ByteCode::RETN}}},
     { "@open",  &(*new TB("function"))(*array_char)(*array_char)("int"),
         {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLA, 0, 1}, {ByteCode::CALLNATIVE, 0, (int)NativeFunction::OPEN}, {ByteCode::RETI} }},
@@ -244,7 +245,7 @@ std::vector<BuiltinSymbolGenerator::BuiltinFunctionInfo> BuiltinSymbolGenerator:
         {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADL, 0, 2}, {ByteCode::CALLNATIVE, 0, (int)NativeFunction::READ}, {ByteCode::RETA} }},
     { "@write", &(*new TB("function"))("int")(*array_char)("nil"),
         {{ByteCode::LOADLI, 0, 0}, {ByteCode::LOADLA, 0, 1}, {ByteCode::CALLNATIVE, 0, (int)NativeFunction::WRITE}, {ByteCode::RETN} }},
-    { "@format", &(*new TB("function"))(*array_char)(*array_char)(*array_char),
+    { "@format", &(*new TB("function"))(*array_char)((*new TB("array"))("top"))(*array_char),
         {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLA, 0, 1}, {ByteCode::CALLNATIVE, 0, (int)NativeFunction::FORMAT}, {ByteCode::RETA} }},
     
     

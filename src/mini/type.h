@@ -327,7 +327,9 @@ namespace mini {
         OutputStream& print(OutputStream& os)const final;
 
         pType instanitiate(const std::vector<pType>& args, const SymbolInfo& info)const {
-            if (args.size() != quantifiers.size()) info.throw_exception("Type argument number does not match");
+            if (args.size() != quantifiers.size()) {
+                info.throw_exception(StringAssembler("Too few arguments for type ")(*this)(": expect ")(quantifiers.size())(", got ")(args.size())());
+            }
             auto a = args.begin();
             auto q = quantifiers.begin();
             for (; q != quantifiers.end(); q++, a++) {

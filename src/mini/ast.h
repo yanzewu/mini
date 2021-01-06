@@ -371,7 +371,6 @@ namespace mini {
         std::vector<pSymbol> parents;
 
         InterfaceNode() : CommandNode(AST::Type_t::INTERFACE) {}
-        explicit InterfaceNode(const pSymbol& symbol) : CommandNode(AST::INTERFACE), symbol(symbol) {}
 
         void add_member(const Ptr<LetNode>& m) { members.push_back(m); }
 

@@ -193,21 +193,26 @@ namespace mini {
                 // For a static language, what we store is f_naked. Another advantage is that we can allocate these
                 // bound variables separately (usually useful for language without GC)
                 if (ref->scope != 0 && ref->scope != symbol_table->cur_scope() && binding_cache.size() > 0) {
-                    auto r = binding_cache.back().find(ref);
-                    if (r == binding_cache.back().end()) {
-                        // create new ref assign to r
-                        auto new_binding_var = symbol_table->insert_var(
-                            ref->symbol, VarMetaData::Source::BINDING, ref->prog_type);
-                        binding_cache.back().insert({ ref, new_binding_var });
-                        m_node->set_ref(new_binding_var);
-                    }
-                    else {  // already referenced as binding variable
-                        m_node->set_ref(r->second);
-                    }
+                    m_node->set_ref(register_binding_variable(ref));
                 }
                 else {  // local/global/arg
                     m_node->set_ref(ref);
                 }
+            }
+        }
+
+        // Given a variable ref, return a binding variable ref.
+        VariableRef register_binding_variable(VariableRef ref) {
+            auto r = binding_cache.back().find(ref);
+            if (r == binding_cache.back().end()) {
+                // create new ref assign to r
+                auto new_binding_var = symbol_table->insert_var(
+                    ref->symbol, VarMetaData::Source::BINDING, ref->prog_type);
+                binding_cache.back().insert({ ref, new_binding_var });
+                return new_binding_var;
+            }
+            else {  // already referenced as binding variable
+                return r->second;
             }
         }
 
@@ -280,7 +285,7 @@ namespace mini {
             process_expr(m_node->lhs);
 
             if (!m_node->lhs->prog_type->is_universal()) {
-                m_node->get_info().throw_exception("Universal type required");
+                m_node->get_info().throw_exception(StringAssembler("Not a universal type: ")(*m_node->lhs->prog_type)());
             }
             auto utype = m_node->lhs->prog_type->as<UniversalType>();
 
@@ -299,7 +304,7 @@ namespace mini {
             process_expr(m_node->caller);
             const auto& func_type_1 = m_node->caller->prog_type;
             if (!func_type_1->is_primitive() || !func_type_1->as<PrimitiveType>()->is_function()) {
-                m_node->get_info().throw_exception("Function type required");
+                m_node->get_info().throw_exception(StringAssembler("Not a function: ")(*m_node->caller->prog_type)());
             }
             auto func_type = func_type_1->as<PrimitiveType>();
 
@@ -400,7 +405,7 @@ namespace mini {
 
             for (auto& s : m_node->statements) {
                 if (s->is_expr()) {
-                    Ptr<ExprNode> st = std::dynamic_pointer_cast<ExprNode>(s);
+                    Ptr<ExprNode> st = std::static_pointer_cast<ExprNode>(s);
                     process_expr(st);
                 }
                 else if (s->get_type() == AST::LET) {
@@ -421,6 +426,15 @@ namespace mini {
 
             binding_cache.pop_back();
             symbol_table->pop_scope();
+
+            // If a child lambda node binds variable not global but outer than this layer, 
+            // we should change it to a new binding variable defined in this level;
+            for (size_t i = 0; i < m_node->bindings.size(); i++) {
+                auto& binding_ref = m_node->bindings[i];
+                if (binding_ref->scope != symbol_table->cur_scope() && binding_ref->scope != 0) {
+                    m_node->bindings[i] = register_binding_variable(binding_ref);
+                }
+            }
 
             // match the type of last statement (or reconstruct)
             // the full monad feature will be improved in the future -- where the last statement should be 'return x'

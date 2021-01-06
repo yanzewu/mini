@@ -172,11 +172,7 @@ namespace mini {
 
         void close_file(int fd);
 
-        std::fstream& get_file(int fd) {
-            auto f = file_descriptors.find(fd);
-            runtime_assert(f != file_descriptors.end(), "Invalid file descriptor");
-            return f->second;
-        }
+        std::fstream& get_file(int fd);
 
         void _fetch_string(Address addr, std::string& buf);
 
