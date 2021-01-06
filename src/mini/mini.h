@@ -80,6 +80,7 @@ namespace mini {
         int exec() {
 
             if (mode == Mode::COMPILE || mode == Mode::COMPILE_EXEC) {
+                int ret;
                 try {
                     if (execute_from_file) {
                         frontend.load_file(arg);
@@ -87,7 +88,7 @@ namespace mini {
                     else {
                         frontend.load_string(arg);
                     }
-                    frontend.process(irprog);
+                    ret = frontend.process(irprog);
                 }
                 catch (const IOError& e) {
                     StdoutOutputStream output;
@@ -99,6 +100,7 @@ namespace mini {
                     e.print(frontend.filename_table(), output) << '\n';
                     return 1;
                 }
+                if (ret != 0) return 1;
                 if (mode == Mode::COMPILE) {
                     // dump the ir (should be binary, but here I use text for debugging)
                     StdoutOutputStream output;

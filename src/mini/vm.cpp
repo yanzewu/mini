@@ -1,6 +1,8 @@
 
 #include "vm.h"
+#include "native.h"
 #include <iostream>
+#include <fstream>
 
 using namespace mini;
 
@@ -217,6 +219,7 @@ void VM::build_field_indices_map()
 		}
 	}
 }
+
 
 void VM::load_local(Size_t index) {
 	Offset_t arg_offset = cur_function->sz_arg + cur_function->sz_bind;
@@ -525,43 +528,134 @@ void format(const char* fmt, size_t fmt_size, const StackElem* args, size_t arg_
 }
 
 
-void VM::call_native(Size_t index) {
-	switch (index)
+int VM::open_file(const std::string& name, const std::string& mode) {
+	std::fstream f;
+	f.open(name);
+	if (f.is_open()) {
+		file_descriptors.insert({ current_fd, std::move(f) });
+		return current_fd++;
+	}
+	else {
+		return -1;
+	}
+}
+
+void VM::close_file(int fd) {
+	auto& f = get_file(fd);
+	f.close();
+	file_descriptors.erase(fd);
+}
+
+void VM::_fetch_string(Address addr, std::string& buf) {
+	const MemoryObject* obj = heap.fetch(addr);
+	runtime_assert(obj->type == MemoryObject::Type_t::ARRAY, "Array required");
+	buf = std::string(static_cast<const char*>(obj->data), obj->size);
+}
+
+Address VM::_store_string(const std::string& buf) {
+
+	Address addr = heap.allocate(MemoryObject::Type_t::ARRAY, buf.size());
+	memcpy(heap.fetch(addr)->data, &buf[0], buf.size());
+	return addr;
+}
+
+void read_file(std::istream& f, int count, char c, std::string& buffer) {
+	if (c != 0) {
+		buffer.resize(count);
+		f.read(&buffer[0], count);
+	}
+	else {
+		std::getline(f, buffer, c);
+	}
+}
+
+void write_file(std::ostream& f, const std::string& c) {
+	
+	f.write(&c[0], c.size());
+}
+
+void VM::call_native(int index) {
+	switch (NativeFunction(index))
 	{
-		// @print
-	case 0: {
-		MemoryObject* obj = heap.fetch(stack.pop().aarg);
-		runtime_assert(obj->type == MemoryObject::Type_t::ARRAY, "Array required");
-		std::cout << std::string(static_cast<char*>(obj->data), obj->size);
+		// @len
+	case NativeFunction::LEN: {
+		stack.top().iarg = heap.fetch(stack.top().aarg)->size;
 		break;
 	}
-		  // @input
-	case 1: {
+		// @copy
+	case NativeFunction::COPY: {
+		int dst_offset = stack.pop().iarg;
+		MemoryObject* obj_dst = heap.fetch(stack.pop().aarg);
+		int src_size = stack.pop().iarg;
+		int src_offset = stack.pop().iarg;
+		const MemoryObject* obj_src = heap.fetch(stack.pop().aarg);
+
+		runtime_assert(src_offset < obj_src->size&& src_offset >= 0, "Source address out of range");
+		runtime_assert(dst_offset < obj_dst->size&& dst_offset >= 0, "Destination address out of range");
+		runtime_assert(src_size >= 0 &&
+			obj_dst->as<ArrayObject>()->size < dst_offset + src_size, "Segment size out of range");
+
+		// we are treating everything as char.
+		memcpy(static_cast<char*>(obj_dst->data) + dst_offset, static_cast<char*>(obj_src->data) + src_offset, src_size);
+		break;
+	}
+		// @open
+	case NativeFunction::OPEN: {
+		std::string name, mode;
+		_fetch_string(stack.pop().aarg, mode);
+		_fetch_string(stack.pop().aarg, name);
+		stack.push(open_file(name, mode));
+		break;
+	}
+		  // @close
+	case NativeFunction::CLOSE: {
+		close_file(stack.pop().iarg);
+		break;
+	}
+		  // @read
+	case NativeFunction::READ: {
+		char delim = stack.pop().carg;
+		int sz = stack.pop().iarg;
+		int fd = stack.pop().iarg;
 		std::string buffer;
-		std::getline(std::cin, buffer);
-		Address addr = heap.allocate(MemoryObject::Type_t::ARRAY, buffer.size());
-		memcpy(heap.fetch(addr)->data, &buffer[0], buffer.size());
-		stack.push(addr);
+		runtime_assert(sz > 0, "Incorrect size");
+		if (fd == 0) {	// read from stdin
+			read_file(std::cin, sz, delim, buffer);
+		}
+		else {
+			read_file(get_file(fd), sz, delim, buffer);
+		}
+		stack.push(_store_string(buffer));
+		break;
+	}
+		  // @write
+	case NativeFunction::WRITE: {
+		std::string buffer;
+		_fetch_string(stack.pop().aarg, buffer);
+		int fd = stack.pop().iarg;
+		if (fd == 1) {
+			write_file(std::cout, buffer);
+		}
+		else if (fd == 2) {
+			write_file(std::cerr, buffer);
+		}
+		else {
+			write_file(get_file(fd), buffer);
+		}
 		break;
 	}
 		  // @format
-	case 2: {
+	case NativeFunction::FORMAT: {
 		std::string buffer;
 		MemoryObject* obj_data = heap.fetch(stack.pop().aarg);
 		MemoryObject* obj_fmt = heap.fetch(stack.pop().aarg);
 		runtime_assert(obj_fmt->type == MemoryObject::Type_t::ARRAY, "Array required");
 		format(static_cast<char*>(obj_fmt->data), obj_fmt->size, static_cast<StackElem*>(obj_data->data), obj_data->size / 4, heap, buffer);
-		Address addr = heap.allocate(MemoryObject::Type_t::ARRAY, buffer.size());
-		memcpy(heap.fetch(addr)->data, &buffer[0], buffer.size());
-		stack.push(addr);
-		break;
-	}
-		  // @len
-	case 3: {
-		stack.top().iarg = heap.fetch(stack.top().aarg)->size;
+		stack.push(_store_string(buffer));
 		break;
 	}
 	default:
+		runtime_assert(false, "Invalid native function code");
 		break;
 	}
 }

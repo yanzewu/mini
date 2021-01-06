@@ -154,7 +154,7 @@ namespace mini {
 
         void call_closure(Address addr);
 
-        void call_native(Size_t index);
+        void call_native(int index);
 
         void call(Size_t index);
 
@@ -167,6 +167,20 @@ namespace mini {
         }
 
         int error_flag = 0;
+
+        int open_file(const std::string& name, const std::string& mode);
+
+        void close_file(int fd);
+
+        std::fstream& get_file(int fd) {
+            auto f = file_descriptors.find(fd);
+            runtime_assert(f != file_descriptors.end(), "Invalid file descriptor");
+            return f->second;
+        }
+
+        void _fetch_string(Address addr, std::string& buf);
+
+        Address _store_string(const std::string& buf);
 
     private:
 
@@ -188,6 +202,8 @@ namespace mini {
         struct FieldLocation { Size_t field_index, is_global; };
 
         std::unordered_map<uint64_t, FieldLocation> field_indices;
+        std::unordered_map<int, std::fstream> file_descriptors;
+        int current_fd = 3;
     };
 
 }

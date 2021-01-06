@@ -151,7 +151,9 @@ namespace mini {
         // AST has the ownship of pSymbol because that's the first place it is stored.
 
         VarNode() : ExprNode(AST::Type_t::VAR), ref(NULL) {}
-        explicit VarNode(const pSymbol& name_) : ExprNode(AST::Type_t::VAR), symbol(name_), ref(NULL) {}
+        explicit VarNode(const pSymbol& name_) : ExprNode(AST::Type_t::VAR), symbol(name_), ref(NULL) {
+            this->set_info(name_->get_info());
+        }
 
         void set_symbol(const pSymbol& symbol) {
             this->symbol = symbol;
@@ -241,7 +243,11 @@ namespace mini {
         pType prog_type;
 
         TypeNode() : AST(AST::Type_t::TYPE), prog_type(NULL) {}
-        explicit TypeNode(const pSymbol& symbol) : AST(AST::TYPE), symbol(symbol) {}
+
+        // non-universal type only
+        explicit TypeNode(const pSymbol& symbol) : AST(AST::TYPE), symbol(symbol) {
+            this->set_info(symbol->get_info());
+        }
 
         bool is_expr()const {
             return false;
@@ -256,10 +262,11 @@ namespace mini {
         pSymbol symbol;
         Ptr<VarNode> self_arg;                  // for extends. Represents the self parameter in extends A => new_A(self)
         std::vector<Ptr<TypeNode>> type_args;   // type arguments.
-        VariableRef constructor_ref;            // ref to constructor function A->(...->A)
-        const ObjectTypeMetaData* type_ref;     // ref to the object type
 
-        explicit NewNode(const pSymbol& symbol) : ExprNode(AST::Type_t::NEW), symbol(symbol), self_arg(NULL), constructor_ref(NULL), type_ref(NULL) {}
+        VariableRef constructor_ref = NULL;            // ref to constructor function A->(...->A)
+        const ObjectTypeMetaData* type_ref = NULL;     // ref to the object type
+
+        NewNode() : ExprNode(AST::Type_t::NEW), self_arg(NULL) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -352,7 +359,7 @@ namespace mini {
         TypedefRef ref = NULL;
         VariableRef constructor_ref = NULL;
 
-        ClassNode(const pSymbol& symbol) : CommandNode(AST::CLASS), symbol(symbol), base(NULL), constructor(NULL) {}
+        ClassNode() : CommandNode(AST::CLASS), base(NULL), constructor(NULL) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };

@@ -326,10 +326,11 @@ void IRCodeGenerator::process_class(const ClassNode* node) {
 
 void IRCodeGenerator::build_system_lib(const SymbolTable& symbol_table) {
     for (const auto& f : BuiltinSymbolGenerator::builtin_function_info) {
-        auto prog_type = f.get_prog_type(symbol_table);
+        auto prog_type = symbol_table.find_var(f.name)->prog_type;
+        Size_t nargs = prog_type->is_primitive() ? prog_type->as<PrimitiveType>()->args.size() - 1
+            : prog_type->as<UniversalType>()->body->as<PrimitiveType>()->args.size() - 1;
         auto gindex = add_field(f.name, prog_type);
-        auto findex = push_lambda_env(
-            f.arg_types.size() - 1, 0, f.name, SymbolInfo::absolute(), prog_type);
+        auto findex = push_lambda_env(nargs, 0, f.name, SymbolInfo::absolute(), prog_type);
         cur_function()->codes = f.codes;
         irprog->constant_pool[irprog->line_number_table_index]->as<LineNumberTable>()->add_entry(
             function_stack.back(), 0, 0

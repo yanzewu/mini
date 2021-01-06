@@ -44,7 +44,9 @@ void test_frontend(const std::string& filename, std::ostream& output) {
     IRProgram irprog;
     front_end.initialize({});
     front_end.load_file(filename);
-    front_end.process(irprog);
+    if (front_end.process(irprog)) {
+        return;
+    }
 
     FileOutputStream os(output);
     irprog.print_full(os);

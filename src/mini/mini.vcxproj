@@ -149,6 +149,7 @@
     <ClInclude Include="lexer.h" />
     <ClInclude Include="memory.h" />
     <ClInclude Include="mini.h" />
+    <ClInclude Include="native.h" />
     <ClInclude Include="ordered_dict.h" />
     <ClInclude Include="parser.h" />
     <ClInclude Include="stream.h" />

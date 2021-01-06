@@ -29,6 +29,12 @@ VariableRef LocalVarTable::find(const std::string& name) {
     return ret != names.end() ? ret->second : NULL;
 }
 
+ConstVariableRef LocalVarTable::find(const std::string& name)const
+{
+    auto ret = names.find(name);
+    return ret != names.end() ? ret->second : NULL;
+}
+
 VariableRef LocalVarTable::find(Index_t index, VarMetaData::Source source) {
     switch (source)
     {
@@ -51,16 +57,6 @@ Index_t LocalVarTable::next_index(VarMetaData::Source source) const {
     }
 }
 
-
-VariableRef SymbolTable::find_var(const std::string & name) {
-
-    for (auto vt_iter = var_table_stack.rbegin(); vt_iter != var_table_stack.rend(); vt_iter++) {
-        auto ret = var_table_storage[*vt_iter].find(name);
-        if (ret) return ret;
-    }
-
-    return NULL;
-}
 
 VariableRef SymbolTable::find_var(const std::string& name, const SymbolInfo& info) {
 

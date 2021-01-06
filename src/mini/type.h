@@ -332,9 +332,7 @@ namespace mini {
             auto q = quantifiers.begin();
             for (; q != quantifiers.end(); q++, a++) {
                 if (!(*q)->is_interface_of(a->get())) {
-                    StringOutputStream s;
-                    s << "Type " << (**q) << " is not an interface of " << (**a);
-                    info.throw_exception(s.str());
+                    info.throw_exception(StringAssembler("Type ")(**q)(" is not an interface of ")(**a)());
                 }
             }
             return evaluate(body, args, 0, info);

@@ -26,6 +26,8 @@ namespace mini {
         // Find a variable by symbol. Returns NULL if not found
         VariableRef find(const std::string& name);
 
+        ConstVariableRef find(const std::string& name)const;
+
         // Find a variable by index.
         VariableRef find(Index_t index, VarMetaData::Source source);
 
@@ -55,8 +57,10 @@ namespace mini {
             dependency_ref = dependency_ref_;
         }
 
-        // find a variable in all scopes without checking visibility
-        VariableRef find_var(const std::string&);
+        // find a global variable
+        ConstVariableRef find_var(const std::string& name)const {
+            return var_table_storage[0].find(name);
+        }
 
         // find a variable in all scopes defined before current location
         VariableRef find_var(const std::string&, const SymbolInfo&);
@@ -79,6 +83,11 @@ namespace mini {
 
         // find a type or type variable. returns (ref, relative stack distance)
         std::pair<TypedefRef, unsigned> find_type(const std::string& name, const SymbolInfo&);
+
+        // = find_type(ref->name, ref->info)
+        std::pair<TypedefRef, unsigned> find_type(ConstSymbolRef ref) {
+            return find_type(ref->get_name(), ref->get_info());
+        }
 
         // insert a variable into the top scope. Throws if already defined.
         VariableRef insert_var(const pSymbol& symbol, VarMetaData::Source source, const pType& prog_type);

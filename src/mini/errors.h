@@ -76,6 +76,26 @@ namespace mini {
         }
     };
 
+
+    class ErrorManager {
+    public:
+
+        int error_uplimit;
+        int error_hold = 0;
+        std::vector<std::string>* filenames;
+        StdoutOutputStream output;
+
+        void reset() { error_hold = 0; }
+        bool has_error()const { return error_hold > 0; }
+        bool has_enough_errors()const { return error_hold > error_uplimit; }
+        void count_and_print_error(const ParsingError& e) { 
+            e.print(*filenames, output);
+            output << '\n';
+            error_hold++;
+            output.flush();
+        }
+    };
+
 }
 
 #endif

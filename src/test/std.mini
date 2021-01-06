@@ -24,7 +24,7 @@ let fix:forall<X>.function(function(X,X), function(X,X));
 set fix = \<X>(f:function(X,X))->{\(x:X)->f(fix<X>(f)(x))};
 
 let aget = \<X>(a:array(X), i:int)->@get<X>(a, i);
-let aset = \<X>(a:array(X), i:int, v:X)->@aseta(a, i, v);
+let aset = \<X>(a:array(X), i:int, v:X)->@set<X>(a, i, v);
 
 class Nil {};
 class Bool {

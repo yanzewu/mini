@@ -28,12 +28,21 @@ namespace mini {
             symbol_table.initialize(&dependency_resolver);
             BuiltinSymbolGenerator::generate_builtin_types(symbol_table);
             BuiltinSymbolGenerator::generate_builtin_functions(symbol_table);
+            error_manager.error_uplimit = 20;
+            error_manager.filenames = &filenames;
+            error_manager.reset();
         }
 
-        void process(IRProgram& ir_program) {
+        int process(IRProgram& ir_program) {
             parse();
             attribute();
-            generate_ir(ir_program);
+            if (error_manager.has_error()) {
+                return 1;
+            }
+            else {
+                generate_ir(ir_program);
+                return 0;
+            }
         }
 
         // load the string as command
@@ -53,7 +62,7 @@ namespace mini {
         }
 
         void attribute() {
-            attributor.process(nodes, symbol_table);
+            attributor.process(nodes, symbol_table, &error_manager);
         }
 
         void generate_ir(IRProgram& ir_program) {
@@ -169,14 +178,14 @@ namespace mini {
             
             FileLoader::read_file(filename, buffer);
             lexer.tokenize(buffer, token_buffer, file_no);
-            parser.parse(token_buffer, ast_buffer);
+            parser.parse(token_buffer, ast_buffer, &error_manager);
         }
 
         void parse_string_to_ast(const std::string& str, std::vector<Ptr<AST>>& ast_buffer) {
             std::vector<Token> token_buffer;
 
             lexer.tokenize(str, token_buffer, 0);
-            parser.parse(token_buffer, ast_buffer);
+            parser.parse(token_buffer, ast_buffer, &error_manager);
         }
 
         // get the filename table
@@ -199,6 +208,7 @@ namespace mini {
         Parser parser;
         Attributor attributor;
         IRCodeGenerator ircodegenerator;
+        ErrorManager error_manager;
 
         bool input_from_file = true;    // false means input from string.
         std::string filename_main;

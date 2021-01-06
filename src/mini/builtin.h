@@ -22,15 +22,11 @@ namespace mini {
 
         struct BuiltinFunctionInfo {
             std::string name;
-            std::vector<PrimitiveTypeBuilder> arg_types;
+            const TypeBuilder* builder;
             std::vector<ByteCode> codes;
 
-            pType get_prog_type(const SymbolTable& symbol_table)const {
-                auto tb = PrimitiveTypeBuilder("function");
-                for (const auto& a : arg_types) {
-                    tb(a);
-                }
-                return tb(symbol_table);
+            pType get_prog_type(SymbolTable& symbol_table)const {
+                return builder->build(symbol_table);
             }
         };
         
@@ -50,19 +46,7 @@ namespace mini {
         // Generate the builtin functions to the symbol table.
         static void generate_builtin_functions(SymbolTable& symbol_table) {
             for (const auto& f : builtin_function_info) {
-                if (f.name == "@get") {    // special cases of universal function
-                    
-                    using utb = UniversalTypeBuilder;
-                    using tb = PrimitiveTypeBuilder;
-                    using vtb = TypeVariableBuilder;
-
-                    symbol_table.insert_var(std::make_shared<Symbol>(f.name), VarMetaData::GLOBAL,
-                        utb()("X")(tb("function")("@Addressable")("int")(vtb("X"))).build(symbol_table)
-                    );
-                }
-                else {
-                    symbol_table.insert_var(std::make_shared<Symbol>(f.name), VarMetaData::GLOBAL, f.get_prog_type(symbol_table));
-                }
+                symbol_table.insert_var(std::make_shared<Symbol>(f.name), VarMetaData::GLOBAL, f.get_prog_type(symbol_table));    
             }
         }
 

@@ -16,29 +16,44 @@ namespace mini {
 
         Attributor() {}
 
-        void process(const std::vector<pAST>& nodes, SymbolTable& sym_table) {
+        void process(const std::vector<pAST>& nodes, SymbolTable& sym_table, ErrorManager* error_manager=NULL) {
             this->symbol_table = &sym_table;
+            
             for (const auto& node : nodes) {
-                if (node->is_expr()) {
-                    process_expr(std::static_pointer_cast<ExprNode>(node));
+                try {
+                    process_node(node);
                 }
-                else if (node->get_type() == AST::LET) {
-                    process_let(ast_cast<LetNode>(node));
-                }
-                else if (node->get_type() == AST::SET) {
-                    process_set(ast_cast<SetNode>(node));
-                }
-                else if (node->get_type() == AST::INTERFACE) {
-                    process_interface(ast_cast<InterfaceNode>(node));
-                }
-                else if (node->get_type() == AST::CLASS) {
-                    process_class(ast_cast<ClassNode>(node));
-                }
-                else {
-                    throw std::runtime_error("Incorrect AST type");
+                catch (const ParsingError& e) {
+                    if (error_manager && !error_manager->has_enough_errors()) {
+                        error_manager->count_and_print_error(e);
+                    }
+                    else {
+                        throw;
+                    }
                 }
             }
             this->symbol_table = nullptr;
+        }
+
+        void process_node(const pAST& node) {
+            if (node->is_expr()) {
+                process_expr(std::static_pointer_cast<ExprNode>(node));
+            }
+            else if (node->get_type() == AST::LET) {
+                process_let(ast_cast<LetNode>(node));
+            }
+            else if (node->get_type() == AST::SET) {
+                process_set(ast_cast<SetNode>(node));
+            }
+            else if (node->get_type() == AST::INTERFACE) {
+                process_interface(ast_cast<InterfaceNode>(node));
+            }
+            else if (node->get_type() == AST::CLASS) {
+                process_class(ast_cast<ClassNode>(node));
+            }
+            else {
+                throw std::runtime_error("Incorrect AST type");
+            }
         }
 
         void process_type(const Ptr<TypeNode>& m_node) {
@@ -54,7 +69,7 @@ namespace mini {
             
         void process_concrete_type(const Ptr<TypeNode>& m_node) {
 
-            auto [ref, stack_id] = symbol_table->find_type(m_node->symbol->name, m_node->get_info());  // ref,stack
+            auto [ref, stack_id] = symbol_table->find_type(m_node->symbol.get());  // ref,stack
 
             if (!ref) {
                 m_node->get_info().throw_exception("Undefined type: " + m_node->symbol->name);
@@ -302,7 +317,7 @@ namespace mini {
         void process_new(NewNode* m_node) {
             auto constructor_ref = symbol_table->find_var(SymbolTable::constructor_name(m_node->symbol->name), m_node->symbol->get_info());
             if (!constructor_ref) m_node->symbol->get_info().throw_exception("Type constructor not defined: " + m_node->symbol->name);
-            const auto& [type_ref, stack_id] = symbol_table->find_type(m_node->symbol->name, m_node->symbol->get_info());
+            const auto& [type_ref, stack_id] = symbol_table->find_type(m_node->symbol.get());
             if (!type_ref) m_node->symbol->get_info().throw_exception("Type not defined: " + m_node->symbol->name);
             if (!type_ref->is_object()) m_node->symbol->get_info().throw_exception("Not an object type: " + m_node->symbol->name);
             m_node->type_ref = type_ref->as<ObjectTypeMetaData>();
@@ -455,6 +470,9 @@ namespace mini {
                 m_node->ref = symbol_table->insert_var(m_node->symbol, VarMetaData::LOCAL, m_node->vtype->prog_type);
             }
             else {
+                if (BuiltinSymbolGenerator::is_builtin_symbol(m_node->symbol.get())) {
+                    m_node->symbol->get_info().throw_exception("Redefinition of system symbol: " + m_node->symbol->get_name());
+                }
                 m_node->ref = symbol_table->insert_var(m_node->symbol, VarMetaData::GLOBAL, m_node->vtype->prog_type);
             }
 
@@ -472,7 +490,7 @@ namespace mini {
                 }
                 else {
                     if (ref->scope == 0 && BuiltinSymbolGenerator::is_builtin_symbol(lhs->symbol.get())) {
-                        m_node->get_info().throw_exception("Redefinition of system symbols are not allowed");
+                        m_node->get_info().throw_exception("Redefinition of system symbol: " + lhs->symbol->get_name());
                         // 'let' does not need this because there is redefinition check.
                     }
 
@@ -504,7 +522,7 @@ namespace mini {
 
         void process_interface(InterfaceNode* m_node) {
             
-            const auto& [r, stack_id] = symbol_table->find_type(m_node->symbol->get_name(), m_node->symbol->get_info());
+            const auto& [r, stack_id] = symbol_table->find_type(m_node->symbol.get());
             if (!r) {
                 throw std::runtime_error("Interface not registered in the first pass");
             }
@@ -515,7 +533,7 @@ namespace mini {
             symbol_table->push_scope(symbol_table->create_scope());
             auto t = std::make_shared<StructType>();
             for (auto& p : m_node->parents) {
-                const auto& [parent_t, stack_id] = symbol_table->find_type(p->get_name(), p->get_info());
+                const auto& [parent_t, stack_id] = symbol_table->find_type(p.get());
                 if (parent_t && parent_t->is_interface()) {
                     for (const auto& f : parent_t->as<InterfaceTypeMetaData>()->actual_type->as<StructType>()->fields) {
                         const auto& [iter, succ] = t->fields.insert(f);
@@ -542,7 +560,7 @@ namespace mini {
 
         void process_class(ClassNode* m_node) {
 
-            const auto& [r, stack_id] = symbol_table->find_type(m_node->symbol->get_name(), m_node->symbol->get_info());
+            const auto& [r, stack_id] = symbol_table->find_type(m_node->symbol.get());
             if (!r) {
                 throw std::runtime_error("Class not registered in the first pass");
             }
@@ -602,26 +620,21 @@ namespace mini {
             }
             
             // last statement must be self
-            auto self_node = std::make_shared<VarNode>(
-                std::make_shared<Symbol>("self", m_node->constructor->get_info()));
-            self_node->set_info(m_node->constructor->get_info());
-            m_node->constructor->statements.push_back(self_node);
+            m_node->constructor->statements.push_back(
+                std::make_shared<VarNode>(
+                    std::make_shared<Symbol>("self", m_node->constructor->get_info())));
 
             // \<X>.self:A(X) -> {\<Y>.(...)->{} }
-            auto constructor_node = std::make_shared<LambdaNode>();     // contructor as a global function;
-            auto self_type_node = std::make_shared<TypeNode>();         // self must have same type as A
-            constructor_node->set_info(m_node->constructor->get_info());
-            self_type_node->symbol = m_node->symbol;
-            self_type_node->set_info(m_node->constructor->get_info());
+            auto constructor_node = std::make_shared<LambdaNode>();                   // contructor as a global function; Defined at the same location as m_node.
+            auto self_type_node = std::make_shared<TypeNode>(m_node->symbol);         // self must have same type as A
+            constructor_node->set_info(m_node->get_info());
 
             // TODO F-omega constructor_node and self_type_node will have quantifier.
             constructor_node->args.push_back({
                 std::make_shared<Symbol>("self", m_node->get_info()),
                 self_type_node
                 });
-            constructor_node->statements.push_back(
-                std::static_pointer_cast<AST>(m_node->constructor)
-            );
+            constructor_node->statements.push_back(std::static_pointer_cast<AST>(m_node->constructor));
 
             /* Recursive Functions: Fake a type */
             // F-omega: may be universal

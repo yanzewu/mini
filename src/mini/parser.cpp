@@ -3,6 +3,80 @@
 
 using namespace mini;
 
+void mini::Parser::parse(const std::vector<Token>& token_buffer, std::vector<Ptr<AST>>& ast_buffer, ErrorManager* error_manager) {
+
+    std::vector<std::pair<TokenIter_t, TokenIter_t>> blocks;
+
+    // scan declaration info.
+
+    TokenIter_t block_begin = token_buffer.begin();
+    for (auto it = token_buffer.begin(); it != token_buffer.end();) {
+        if (it->get_type() == Token::KEYWORD && std::get<Keyword>(it->value) == Keyword::SEMICOLON) {
+            if (it - block_begin > 0) {
+                blocks.push_back({ block_begin, it });
+            }
+            it++;
+            block_begin = it;
+        }
+        else {
+            it++;
+        }
+    }
+    if (block_begin != token_buffer.end()) {
+        throw ParsingError("Semicolon does not match in the end");
+    }
+
+    for (const auto& block : blocks) {
+        try {
+            ast_buffer.push_back(parse_block(block.first, block.second));
+        }
+        catch (const ParsingError& e) {
+            if (error_manager && !error_manager->has_enough_errors()) {
+                error_manager->count_and_print_error(e);
+            }
+            else {
+                throw;
+            }
+        }
+    }
+
+}
+
+Ptr<AST> mini::Parser::parse_block(TokenIter_t token_begin, TokenIter_t token_end) {
+
+    cur_token = token_begin;
+    token_bound = token_end;
+
+    Ptr<AST> ret;
+
+    if (test_keyword_inc(Keyword::LET)) {
+        ret = parse_let_wb();
+    }
+    else if (test_keyword_inc(Keyword::SET)) {
+        ret = parse_set_wb();
+    }
+    else if (test_keyword_inc(Keyword::DEF)) {
+        ret = parse_func_def_wb();
+    }
+    else if (test_keyword_inc(Keyword::CLASS)) {
+        ret = parse_class_wb();
+    }
+    else if (test_keyword_inc(Keyword::INTERFACE)) {
+        ret = parse_interface_wb();
+    }
+    else if (test_keyword_inc(Keyword::IMPORT)) {
+        ret = parse_import_wb();
+    }
+    else {
+        ret = parse_expr();
+    }
+
+    if (cur_token != token_end) {
+        throw_cur_token("Unknown trailing sequence");
+    }
+    return ret;
+}
+
 Ptr<LetNode> mini::Parser::parse_let_wb(bool allow_auto) {
     // assuming the let is parsed.
 
@@ -46,6 +120,7 @@ Ptr<TypeNode> mini::Parser::parse_type() {
 
     auto m_node = std::make_shared<TypeNode>();
     if (test_keyword_inc(Keyword::FORALL)) {
+        m_node->set_info(get_last_info());
         match_keyword_inc(Keyword::LANGLE);
         parse_quantifier_def_wb(m_node->quantifiers);
         match_keyword_inc(Keyword::DOT);
@@ -61,7 +136,7 @@ Ptr<TypeNode> mini::Parser::parse_type() {
     match_token(Token::ID);
 
     m_node->symbol = get_id_inc();
-    m_node->set_info(get_last_info());
+    if (!m_node->quantifiers.empty()) m_node->set_info(get_last_info());
 
     if (test_keyword_inc(Keyword::LBRACKET)) {
         while (1) {
@@ -90,7 +165,6 @@ Ptr<ExprNode> mini::Parser::parse_expr() {
     }
     case Token::ID: {
         prefix = std::make_shared<VarNode>(get_id_inc());
-        prefix->set_info(get_last_info());
         break;
     }
     case Token::KEYWORD: {
@@ -132,12 +206,12 @@ Ptr<ExprNode> mini::Parser::parse_expr() {
         }
         case Keyword::NEW:
         case Keyword::EXTENDS: {
-            auto m_node = std::make_shared<NewNode>(get_id_inc());
+            auto m_node = std::make_shared<NewNode>();
             m_node->set_info(get_last_info());
+            m_node->symbol = get_id_inc();
 
             if (keyword == Keyword::EXTENDS) {  // distinguish call to base/call to self.
                 m_node->self_arg = std::make_shared<VarNode>(std::make_shared<Symbol>("self", get_last_info()));
-                m_node->self_arg->set_info(get_last_info());
             }
             
             // if there are quantifier, will add it first so that transforming will be easier.
@@ -416,8 +490,9 @@ void mini::Parser::parse_statement_list(std::vector<Ptr<AST>>& statements) {
 Ptr<ClassNode> mini::Parser::parse_class_wb() {
     match_token(Token::ID);
 
-    auto m_node = std::make_shared<ClassNode>(get_id_inc());
+    auto m_node = std::make_shared<ClassNode>();
     m_node->set_info(get_last_info());
+    m_node->symbol = get_id_inc();
 
     while (1) {
         if (test_keyword_inc(EXTENDS)) {

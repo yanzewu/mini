@@ -20,71 +20,11 @@ namespace mini {
 
     public:
         
-        void parse(const std::vector<Token>& token_buffer, std::vector<Ptr<AST>>& ast_buffer) {
-
-            std::vector<std::pair<TokenIter_t, TokenIter_t>> blocks;
-
-            // scan declaration info.
-
-            TokenIter_t block_begin = token_buffer.begin();
-            for (auto it = token_buffer.begin(); it != token_buffer.end();) {
-                if (it->get_type() == Token::KEYWORD && std::get<Keyword>(it->value) == Keyword::SEMICOLON) {
-                    if (it - block_begin > 0) {
-                        blocks.push_back({ block_begin, it });
-                    }
-                    it++;
-                    block_begin = it;
-                }
-                else {
-                    it++;
-                }
-            }
-            if (block_begin != token_buffer.end()) {
-                throw ParsingError("Semicolon does not match in the end");
-            }
-
-            for (const auto& block : blocks) {
-                ast_buffer.push_back(parse_block(block.first, block.second));
-            }
-
-        }
+        void parse(const std::vector<Token>& token_buffer, std::vector<Ptr<AST>>& ast_buffer, ErrorManager* error_manager = NULL);
 
     private:
 
-        Ptr<AST> parse_block(TokenIter_t token_begin, TokenIter_t token_end) {
-            
-            cur_token = token_begin;
-            token_bound = token_end;
-
-            Ptr<AST> ret;
-
-            if (test_keyword_inc(Keyword::LET)) {
-                ret = parse_let_wb();
-            }
-            else if (test_keyword_inc(Keyword::SET)) {
-                ret = parse_set_wb();
-            }
-            else if (test_keyword_inc(Keyword::DEF)) {
-                ret = parse_func_def_wb();
-            }
-            else if (test_keyword_inc(Keyword::CLASS)) {
-                ret = parse_class_wb();
-            }
-            else if (test_keyword_inc(Keyword::INTERFACE)) {
-                ret = parse_interface_wb();
-            }
-            else if (test_keyword_inc(Keyword::IMPORT)) {
-                ret = parse_import_wb();
-            }
-            else {
-                ret = parse_expr();
-            }
-            
-            if (cur_token != token_end) {
-                throw_cur_token("Unknown trailing sequence");
-            }
-            return ret;
-        }
+        Ptr<AST> parse_block(TokenIter_t token_begin, TokenIter_t token_end);
 
         // 'wb' stands for without boundary: the leftest word is assume parsed.
 
