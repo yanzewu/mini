@@ -15,6 +15,7 @@ There are only two kinds of statements in Mini. One is "control statement", incl
 
     let a:int;
     set b = a;
+    class Foo {x:int, y:int, new()->{}};
 
 The other type of statement is function call, which does all the interesting stuff. Different from most languages, Mini does not have operators therefore it is syntactically simple (that's why it gets the name).
 All the statements must end with semi-colon `;`.
@@ -64,7 +65,6 @@ Each type (include `list`) corresponds to a literal.
 - char: `'a' 'b'`...
 - tuple: `(a, b, ...)`
 - function: closure
-- expr: statement to be executed
 - array: `[a, b, ...]`
 - struct: `{x=a, y=b, ...}`
 
@@ -154,6 +154,7 @@ Examples:
 The syntax of assignment is
 
     set [varname] = [expr];
+    set [expr].[field] = [expr];
 
 Note the equal operator `=` only has syntactical meaning. The `varname` and `field` cannot be expressions.
 More examples:
@@ -161,10 +162,11 @@ More examples:
     let a:int;
     set a = 1;          # a = 1
     set a = add(a,2);   # a = 3
-    set a = '1';        # Error: Type not match (int != char)
+    set a = '1';        # Error: Type not match (int != str)
 
     interface Foo {a:int, b:int};
     let foo1:Foo = {a=1, b=2};  # foo1 {a=1, b=2}
+    set foo1.a = 2;             # foo1 {a=2, b=2}
 
 Assignment of functions is also allowed, as long as their signature matches.
 
@@ -178,9 +180,9 @@ Variables with the following types are matching (and deriving) `Addressable` and
 - Primitive types deriving `list` (including arrays, tuples and functions);
 - Objects;
 - Structs;
-- Universal types satisfy rules above after type erasure (See Section 6.1);
+- Universal types satisfy rules above after type erasure (See section 7.1);
 
-The atomic types are stored by value.
+The atomic types are stored by value. However, there are predefined boxed types `Nil,Bool,Char,Int,Float` for each atomic type, which are just normal objects.
 
 ## 4. Functions
 
@@ -188,15 +190,19 @@ The atomic types are stored by value.
 
 A closure is represented by a capture list and a statement list (a single statement is treated as a list with one element). The general syntax is
 
-    \(arg1:T1, arg2:T2, ..., argn:Tn)->{stat1, stat2, ..., statn}:Tret
-    \arg1:T1->stat:Tret
-    \()->{stat1,...,statn}:Tret
+    \(arg1:T1, arg2:T2, ..., argn:Tn)->{stat1, stat2, ..., statn}:Tret  # multiple args
+    \arg1:T1->stat:Tret             # a single arg
+    \()->{stat1,...,statn}:Tret     # no args
     
-The capture list can either be a list of names or a single name. A function takes no argument has signature like `function(Tret)`. 
+The type signature of a function is like `function(T1,T2, ..., Tret)`. 
 
-The body of function is either a single statement, or a list of statements  separated by `,`. Function body cannot be empty. The last statement of function will be returned and hence it must be an expression. A function returns `nil` should put an expression that returns a `nil` in the end.
+The body of function is either a single statement, or a list of statements  separated by `,`. Function body cannot be empty. The last statement of function will be returned and hence it must be an expression.
 
-The type annotation `Tret` can be omitted, in this case the function will have the same returning type as the last expression. However, in the case of multiple lambdas, the type annotation will be greedy matched, therefore the annotation of the inner function cannot be omitted if the outer function has annotations.
+The type annotation `Tret` can be omitted, in this case the function will have the same returning type as the last expression. However, in the case of nested lambdas, the type annotation will be greedy matched, therefore the annotation of the inner function cannot be omitted if the outer function has annotations. For example, the following case
+
+    \x:int->\x:int->x:function(int,int)
+
+cannot be parsed since `function(int,int)` will be treated as the type annotation of the inner lambda.
 
 Examples:
 
@@ -208,6 +214,12 @@ Examples:
     let id = \x:top->x;        # Identity
     let myadd:function(int, int, int) = add;     # Define a function f which equals add
 
+Function definition can be nested. The scope of defined function is same as the scope of its context - a global function can access global variables, and a local-defined function can access both local variables and variables in outer scope. However, a local function cannot change the value of binding variables (but can change elements of `Addressable` objects). `set` will raise error for such assignment.
+
+Function cannot be recursive. However, it is easily achieved by separating the declaration and assignment (this only works with global variables):
+
+    let f:function(int, int);
+    set f = \x:int->f(x);       # note this will be an infinite loop
 
 ### 4.2 Def Declaration
 
@@ -226,12 +238,122 @@ Define gaussian:
         exp(negative(y))
     };
 
-Function definition can be nested. The scope of defined function is same as the scope of its context - a global function can access global variables, and a local-defined function can access both local variables and variables in outer scope. However, a local function cannot change the value of binding variables (but can change elements of `Addressable` objects). `set` will raise error for such assignment.
 
 
-## 5. Interfaces
+## 5. Object System
 
-### 5.1 Overview
+The object system in Mini has a similar behavior as in OOP systems. The structural typing is achieved via interfaces.
+
+### 5.1 Class Definitions
+
+Syntax of defining a class:
+
+    class CLASSNAME (extends SUPERCLASS) (implements INTERFACE) {
+        DEFINITION BLOCK, ...
+        CONSTRUCTOR, ...
+    };
+
+The definition block can contains variable definition or function definitions, separated by comma. Example:
+
+    class Foo {
+        a:int,
+        b:char,
+        bar:function(int, int)
+        ...
+    };
+
+All classes inherit `object`.
+
+### 5.2 Constructors
+
+An object may have one constructor. The syntax for constructors are
+
+    new(arg1:T1, ..., argn:Tn)->{FUNCTION BLOCK}
+    new(arg1:T1, ..., argn:Tn) extends SUPERCLASS(EXPR1, EXPR2, ...)->{FUNCTION BLOCK}
+
+The second type calls a constructor of super class (it won't be called by default). If the constructor is not provided, a default one with no argument will be created. Constructors are not class members, but global functions.
+
+Keyword `self` will be available inside the constructor function. The result of last statement in the constructor will not be returned, instead the object instance `self` will be returned.
+
+Example of constructors:
+
+    class Point {
+        x:int, y:int, get_r2:function(int),
+        new(x:int, y:int)->{
+            set self.x = x,
+            set self.y = y,
+            set self.get_r2 = \()->add(mul(self.x, self.x), mul(self.y, self.y))
+        }
+    };
+    let p = new Point(3, 4);
+    p.get_r2();     // gives 25
+
+In the example above, the constructor is equivalent to a global function:
+
+    class Point {...};
+    let new_Point = \self:Point->\(x:int, y:int)->{
+        ...
+        self
+    };
+    let p = new_Point(# dummy variable of Point #)(3, 4);
+
+Constructors are allowed to be recursive, i.e. constructor of the class can be referred in the definition:
+
+    class Bool {
+        val:int,
+        equals:function(Bool,Bool),
+        new(val:int)->{
+            set self.equals = \rhs:Bool->new Bool(@eqi(self.val, rhs.val))
+        }
+    }
+
+### 5.3 Inheritances
+
+Class can be inherited with `extends`. A class may only have one base class.
+
+    class Point {x:int, y:int};
+    class ColoredPoint extends Point {color:tuple(float, float, float)};
+
+The field names in the child classes cannot be same as members in the base class, unless declared with `virtual`:
+
+    class Base {
+        virtual print:function(nil),
+        new()->{
+            let self.print = \()->print("Base class\n")
+        }
+    };
+    class Derived extends Base {
+        print:function(nil),    # not necessary here
+        new()->{
+            let self.print()->print("Derived class\n")
+        }
+    };
+    let b:Base = new Derived();
+    b.print();  // "Derived class"
+
+The literal type of virtual members must be same.
+
+### 5.4 Recursive Objects
+
+Similar to imperative languages (such as Java and C++), self-recursion of classes can be achieved without any additional notations. For example:
+
+    class LinkedList {
+        val:int,
+        next:LinkedList
+    };
+
+Since classes are indexed types, the subtyping of recursive objects is checked by the explicit `extends`, which is checked by fields in the declaration. Specifically, to check if B inherits A, we check the unfolded structure of B and A in the assumption of B < A, i.e.
+
+    B < A (assumed), unfold B < unfold A => B < A (globally)
+
+Here unfolding is understood of unrolling classes to structures, either recursive or non-recursive. However, such recursive checking is only done when it is explicitly declared.
+
+The bound checking between objects and structs are checked by slightly different rules. See Section 6.3 for details.
+
+
+## 6. Interfaces
+
+### 6.1 Overview
 
 Interfaces are aliases for structure types and existential types. Different interfaces equal to each other if their fields are the same.
 
@@ -246,6 +368,15 @@ Variables may have interface types:
 
     let foo:Fooable = {foo=2};
 
+Different interfaces are same and can be used alternatively if they have the same underlying structure type.
+
+    interface IFooable2 {foo:int};
+    let foo2:IFooable2 = foo;
+
+Interface cannot be recursive.
+
+### 6.2 Inheritance
+
 Interface can be syntactically inherited by another interface: Inheriting an interface is equivalent to copying all of its fields and the fields it inherites:
 
     interface IBar extends IFooable {
@@ -253,24 +384,13 @@ Interface can be syntactically inherited by another interface: Inheriting an int
     };
     let bar:IBar = {foo=2, bar=3};
 
-It is also possible to inherit from multiple interfaces, as long as their members does not conflict. If two members have same name and type, only _one copy_ will be kept.
+It is also possible to inherit from multiple interfaces, as long as their members does not conflict (i.e. has same name but different types). If two members have same name and type, only _one copy_ will be kept.
 
     interface IFooBar extends IFooable,IBar {
 
     };  # equivalent to {foo=int, bar=int}
 
-To specify an interface for a class, use `implements`:
-
-    class Bar implements Fooable {
-        foo: int
-    };
-
-The type relationship between interfaces and classes are only determined by their fields, rather than the explicit declaration. However, if a class does not satisfy the structural relationship as it has declared, the compilation will fail.
-
-
-### 5.2 Matching
-
-Different from objects, Mini does not allow any subtypings associated with structure fields. Therefore, variables declared with interfacial types need to have the same fields in assignments. Assignment by variable with a different type is not allowed, even though they are structural subtypes:
+Different from objects, Mini does not allow any subtypings by extending structure fields, since structures can be built easily and the extensive use of up-casting can hide problems. (But this may change in the future) Therefore, variables declared with interfacial types need to have the same fields in assignments:
 
     class Base { ... };
     class Derived extends Base { ... };
@@ -280,16 +400,44 @@ Different from objects, Mini does not allow any subtypings associated with struc
     let foo:IFoo = {foo=new Derived()}  # OK. {foo=Derived} < {foo=Base}
     let foo:IFoo = {foo=new Base(), bar=2};  # Error: type not match: {foo=Base, bar=int} != {foo=Base}
 
-For polymorphism, Mini introduces a new kind of relationship, matching, which is similar to the type classes in Haskell.
+Moreover, there is no direct subtyping between structures and objects, since they derives from different base objects (empty struct and `object`, respectively). 
 
-The matching relation is mainly used in two senarios: (1) An object implementing an interface by the keyword `implements`; (2) Bounded quantifiers in generic functions. In either case, the RHS must be an interface. To check if LHS matches RHS, the following rule are used:
+All the structural relationship are expressed by type matching, see next section.
 
-If LHS and derived class are non-recursive, the fields are checked structurally.
+### 6.3 Bound Checking
+
+Bound checking expresses the structrual relationship between structures and structures/objects. It is used in generic functions and types.
+
+Optionally, an object may explicitly implement an interface by the keyword `implements`. The bound checking still passes if the implementation is implicit.
+
+    class Bar implements Fooable {
+        foo: int
+    };
+
+We define LHS _type matches_ RHS if all RHS's fields are in LHS with types less or equal to that of LHS's fields. 
+We require RHS to be a non-recursive structural type (except `Addressable`), so that type matching is a strict extension to structural subtyping. The rules are
+
+1. If LHS is a non-recursive structure type, the fields are checked structurally;
+2. If LHS is a recursive structure type or an object, it is unfolded once before comparing;
+
+We do not allow the transistivity of type matching. For types outside objects and classes with kind *, they may only be matched with `Addressable`.
+
+Generic interfaces can also be type matched, even in recursive cases:
+
+    interface Equalable<T> {
+        equals: function(T, bool)
+    };
+    class Integer implements Equalable<Integer> {
+        equals: function(Integer, bool),
+        ...
+    };
+
+Here, after member unfolding, `Integer` has structural type `{equals=function(Integer,bool), ...}`, and `Equalable<Integer>` has structural type `{equals=function(Integer,bool)}`, so they are indeed matched.
 
 
-## 6. Generics
+## 7. Generics
 
-### 6.1 Universal Types
+### 7.1 Universal Types
 
 The syntax to declare a universal type is
 
@@ -328,9 +476,11 @@ When a universal function is applied to actual parameters, all universal quantif
     id_pair(id<Int>, 2, 'a');   # Error: type does not match: forall<x>.function(x,x) != function(int,int)
 
 
-## 7. Predefined Types and Variables
+## 8. Predefined Types and Variables
 
-### 7.1 Low-level Functions
+The predefined types and variables are available in module `std`.
+
+### 8.1 Low-level Functions
 
 Functions that operates directly on primitive types. These functions either cannot be expressed by other functions, or is much slower without native implmentation. All the names of functions start with '@'.
 
@@ -341,57 +491,59 @@ Function | Type | Note
 @muli | `function(int,int,int)`
 @divi | `function(int,int,int)`
 @modi | `function(int,int,int)`
-@remi | `function(int,int,int)`
-@powi | `function(int,int,int)`
-@sqrti | `function(int,int,int)`
 @negi | `function(int,int)`
 @addf | `function(float,float,float)`
 @subf | `function(float,float,float)`
 @mulf | `function(float,float,float)`
 @divf | `function(float,float,float)`
 @modf | `function(float,float,float)`
-@remf | `function(float,float,float)`
-@powf | `function(float,float,float)`
-@sqrtf | `function(float,float,float)`
 @negf | `function(float,float)`
-@bit_and | `function(int,int,int)`
-@bit_or | `function(int,int,int)`
-@bit_not | `function(int,int)`
-@bit_xor | `function(int,int,int)`
-@gei | `function(int,int,bool)`
-@gti | `function(int,int,bool)`
-@lei | `function(int,int,bool)`
-@lti | `function(int,int,bool)`
-@eqi | `function(int,int,bool)`
-@nei | `function(int,int,bool)`
-@gef | `function(float,float,bool)`
-@gtf | `function(float,float,bool)`
-@lef | `function(float,float,bool)`
-@ltf | `function(float,float,bool)`
-@eqf | `function(float,float,bool)`
-@nef | `function(float,float,bool)`
-@print | `function(array(char), nil)`
-@input | `function(array(char))`
-@format | `function(array(char), array(Addressable), array(char))`
-@throw | `function(array(char), bottom)`
-@len | `function(Addressable,int)`
-@ageti | `function(array(int),int,int)`
-@aseti | `function(array(int),int,int,nil)`
-@agetf | `function(array(float),int,float)`
-@asetf | `function(array(float),int,float,nil)`
-@aget | `function(array(char),int,char)`
-@aset | `function(array(char),int,char,nil)`
-@ageta | `function(array(list),int,list)`
-@aseta | `function(array(list),int,list,nil)`
-@bool | `function(top,bool)` | converting anything other than 0,0.0f,false to true
+@and | `function(int,int,int)`
+@or | `function(int,int,int)`
+@not | `function(int,int)`
+@xor | `function(int,int,int)`
+@gei | `function(int,int,int)`
+@gti | `function(int,int,int)`
+@lei | `function(int,int,int)`
+@lti | `function(int,int,int)`
+@eqi | `function(int,int,int)`
+@nei | `function(int,int,int)`
+@gef | `function(float,float,int)`
+@gtf | `function(float,float,int)`
+@lef | `function(float,float,int)`
+@ltf | `function(float,float,int)`
+@eqf | `function(float,float,int)`
+@nef | `function(float,float,int)`
 @ftoi | `function(float,int)`
 @ctoi | `function(char,int)`
 @itof | `function(int,float)`
 @itoc | `function(int,char)`
+@array | `function(int,array(char))` | Create an array, given length
+@arrayi | `function(int,array(int))` |
+@arrayf | `function(int, array(float))`
+@aget | `function(array(char),int,char)`
+@ageti | `function(array(int),int,int)`
+@agetf | `function(array(float),int,float)`
+@aset | `function(array(char),int,char,nil)`
+@aseti | `function(array(int),int,int,nil)`
+@asetf | `function(array(float),int,float,nil)`
+@bool | `function(top,int)` | converting anything other than 0,0.0f,false to 1
+@throw | `function(array(char), bottom)`
+@exit | `function(nil)` | Exit
+@alloc | `forall<X>.function(int,array(X))`
+@set | `forall<X>.function(array(X),int,X,nil)`
+@get | `forall<X>.function(list,int,X)` | Fetch and casting. This is the only weak type
+@len | `function(Addressable,int)`
+@copy | `function(Addressable,int,int,Addressable,int)` | Copy #2 from #0:#1 to #3:#4.
+@open | `function(array(char),int,int)` | Open a file with mode #1, return file descriptor
+@close | `function(int,nil)` | Close a file
+@read | `function(int,int,char,array(char))` | Read #1 bytes from file descriptor #0; if #2 != 0 will stop when #2 is meet.
+@write | `function(int,array(char),int)` | Write string to file descriptor #0
+@format | `function(array(char), array(Addressable), array(char))`
 
-### 7.2 Extended Functions
+### 9.2 Extended Functions
 
-Arithemetic and basic functional programming. Most of them are defined in module std.
+Arithemetic and basic functional programming:
 
 Function | Type | Usage
 --- | --- | ---
@@ -400,14 +552,21 @@ const | `forall<X,Y>.function(X,Y,X)` | return the first one
 seq | `forall<X,Y>.function(X,Y,Y)` | return the second one
 dot | `forall<X,Y,Z>.function(function(X,Y),` `function(Y,Z),function(X,Z))` | function product
 flip |`forall<X,Y,Z>.function(function(X,Y,Z),` `function(Y,X,Z))` | flip the first and second argument
+fst | `forall<X,Y>.function(tuple(X,Y),X)` | first tuple member
+snd | `forall<X,Y>.function(tuple(X,Y),Y)` | second tuple member
 curry | `forall<X,Y,Z>.function(function(X,Y,Z),` `function(X,function(Y,Z)))`
 uncurry | `forall<X,Y,Z>.function(function(X,function(Y,Z)),` `function(X,Y,Z))`
-error | `function(array(char),bottom)` | same as @throw
-undefined | `function(bottom)` | @throw("undefined")
+until | `forall<X>.function(function(X,Bool),function(X,X),` `function(X,X))` | continuously apply function until cond(a) is true
+error | `function(array(char),bottom)` | same as @error
+undefined | `function(bottom)` | @error("undefined")
+fix | `forall<X>.function(function(X,X),function(X,X))` | fixed-point combinator
+sel | `forall<X>.function(Bool,X,X)` | selects first or second, depends on parameter
+sand | `function(function(Bool),function(Bool),Bool)` | shortcut and
+sor | `function(function(Bool),function(Bool),Bool)` | shortcut or
 
 Arrays and lists:
 
 Function | Type | Usage
 --- | --- | ---
 aget | `forall<X>.function(array(X),int,X)`
-
+aset | `forall<X>.function(array(X),int,X,array(X))`

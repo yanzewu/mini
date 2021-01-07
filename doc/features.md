@@ -1,6 +1,6 @@
 # Mini: Feature Plan
 
-Yes -- Has plan to support
+Yes -- Supported
 No  -- No plan to support
 LT  -- As a long term plan
 TBD -- Not decided yet 
@@ -27,24 +27,24 @@ Version | Main Feature
 
 Name | Availablity | Notes
 --- | --- | ---
-Compiled | 0.1 | Maybe To C or just VM object. Requires static type
-Compile to executable | 0.3,Partially | Will be java classes-like executables
+Compiled | Yes | Maybe To C or just VM object. Requires static type
+Compile to executable | 0.7,Partially | Will be java classes-like executables
 Interactive interpretation | LT |
-Function as object, lambda | 0.1 |
-Global variable | 0.1 |
-Scope shadowing | 0.1 | 
-Lambda captures local variable | 0.1 | 
+Function as object, lambda | Yes |
+Global variable | Yes |
+Scope shadowing | Yes | 
+Lambda captures local variable | Yes | 
 Currying and partial evaluation | No | Requires lazy eval, or special 'bind' function
 Lazy evaluation | No |
 Lazy evaluation by default | No | Requires currying and nonsequential execution
 Pattern matching by structured binding | 0.5 | 
-Variable assignment | 0.1 | Requires sequential execution
-Class member assignment | 0.3 | Requires sequential eval and (lvalue or overload). May achieved via function
-Call by sharing | 0.1 | Requires no deep copy
+Variable assignment | Yes | Requires sequential execution
+Class member assignment | Yes | Requires sequential eval and (lvalue or overload). May achieved via function
+Call by sharing | Yes | Requires no deep copy
 Viable length function arguments | No |
-Module importing | 0.1 | Without namespace
+Module importing | Yes | Without namespace
 Namespace | 0.7 |
-String literal | 0.1 |
+String literal | Yes |
 Operators | No |
 Macro | No |
 
@@ -52,38 +52,37 @@ Macro | No |
 
 Name | Availablity | Notes
 --- | --- | ---
-Primitive atomic types | 0.1 | int, char, float, bool, nil
-Primitive collection types | 0.1 | array, tuple, function
-Duck type | 0.2 | struct
-Static type inference | 0.1 | But maybe more dynamical in the future
+Primitive atomic types | Yes | int, char, float, bool, nil
+Primitive collection types | Yes | array, tuple, function
+Duck type | Yes | struct
+Static type inference | Yes | But maybe more dynamical in the future
 Reference type | No |
-Generic functions | 0.2 |
+Generic functions | Yes |
 Generic classes | 0.6 |
-Unknown/any/undefined/maybe | 0.5 |
-Type constraint | 0.2 |
+Type constraint | Yes |
 Existential types | TBD |
-Full universal types | 0.2 | 
-Recursive types | 0.3 |
-Multual recursive types | 0.3 |
+Full universal types | Yes | 
+Recursive types | 0.6 |
+Multual recursive types | 0.6 |
 Automatic type deduction | No |
-Runtime type info (RTTI) | LT | typeof() returns the corresponding type
+Runtime type info (RTTI) | 0.5 | typeof() returns the corresponding type
 
 ### Object System
 
 Name | Availablity | Notes
 --- | --- | ---
-Object system | 0.3 |
-Object inheritance | 0.3 |
+Object system | Yes |
+Object inheritance | Yes |
 Multiple inheritances | No |
-Constructor | 0.3 |
-Retrieve base class constructor | 0.3
-Multiple constructors | 0.3 |
-Methods with self-reference | 0.3 |
+Constructor | Yes |
+Retrieve base class constructor | Yes
+Multiple constructors | No |
+Methods with self-reference | Yes |
 Retrieve base class in methods | No |
 Static members | No |
-Initialization by duck typing | 0.3 |
-Runtime dispatching | 0.3 | 
-Interfaces | 0.2 |
+Initialization by duck typing | No |
+Runtime dispatching | Yes | 
+Interfaces | Yes |
 
 ### Control
 
@@ -91,5 +90,5 @@ Name | Availablity | Notes
 --- | --- | ---
 Pattern matching | 0.4,0.5 |
 Short-circuit if/else | No | Redundant if pattern matching is supported
-Loop/fixed combinator | 0.4,0.8 | Provided as function; tail recursion optimization
+Loop/fixed combinator | Yes,0.7 | Provided as function; tail recursion optimization
 Continuation/Coroutine | No | Should be covered by lambdas
