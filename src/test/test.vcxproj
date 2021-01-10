@@ -278,6 +278,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\mini\ast.cpp" />
+    <ClCompile Include="..\mini\attributor.cpp" />
     <ClCompile Include="..\mini\ir.cpp" />
     <ClCompile Include="..\mini\ircodegen.cpp" />
     <ClCompile Include="..\mini\lexer.cpp" />

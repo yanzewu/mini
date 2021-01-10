@@ -26,6 +26,10 @@ namespace mini {
                 catch (const ParsingError& e) {
                     if (error_manager && !error_manager->has_enough_errors()) {
                         error_manager->count_and_print_error(e);
+                        while (symbol_table->cur_scope() != 0) {
+                            symbol_table->pop_scope();
+                        }
+                        binding_cache.clear();
                     }
                     else {
                         throw;
@@ -56,7 +60,29 @@ namespace mini {
             }
         }
 
+        // Process a single statement inside lambda.
+        void process_statement(const pAST& node) {
+            if (node->is_expr()) {
+                process_expr(std::static_pointer_cast<ExprNode>(node));
+            }
+            else if (node->get_type() == AST::LET) {
+                process_let(ast_cast<LetNode>(node));
+            }
+            else if (node->get_type() == AST::SET) {
+                process_set(ast_cast<SetNode>(node));
+            }
+            else {
+                throw std::runtime_error("Incorrect AST type");
+            }
+        }
+
         void process_type(const Ptr<TypeNode>& m_node) {
+
+            // If prog_type is already present, omit it.
+            if (m_node->skip_attribution) {
+                if (!m_node->prog_type) throw std::runtime_error("Skip an unattributed typenode");
+                return;
+            }
 
             // for universal type
             if (m_node->quantifiers.size() > 0) {
@@ -88,6 +114,7 @@ namespace mini {
             }
             else if (ref->is_interface()) {
                 m_node->prog_type = ref->as<InterfaceTypeMetaData>()->actual_type;
+                if (!m_node->prog_type) m_node->get_info().throw_exception("Interface not defined: " + m_node->symbol->get_name());
             }
             else if (ref->is_variable()) {
                 // We do not allow type variable take argument. It would be a F-omega extension.
@@ -175,6 +202,11 @@ namespace mini {
         }
 
         void process_var(VarNode* m_node) {
+            if (m_node->skip_attribution) {
+                if (!m_node->ref) throw std::runtime_error("Skip an unattributed node");
+                return;
+            }
+
             VariableRef ref = symbol_table->find_var(m_node->symbol.get());
             if (!ref) {
                 m_node->get_info().throw_exception("Undefined variable: " + m_node->symbol->name);
@@ -381,7 +413,8 @@ namespace mini {
             m_node->set_prog_type(f->second);
         }
 
-        void process_lambda(LambdaNode* m_node) {
+        // if self_reference is set, will set its type.
+        void process_lambda(LambdaNode* m_node, VariableRef self_reference=NULL) {
 
             auto t = std::make_shared<UniversalType>();
             if (!m_node->quantifiers.empty()) process_quantifiers(m_node->quantifiers, t);
@@ -402,22 +435,19 @@ namespace mini {
             }
             binding_cache.push_back({});
 
-
-            for (auto& s : m_node->statements) {
-                if (s->is_expr()) {
-                    Ptr<ExprNode> st = std::static_pointer_cast<ExprNode>(s);
-                    process_expr(st);
-                }
-                else if (s->get_type() == AST::LET) {
-                    process_let(ast_cast<LetNode>(s));
-                }
-                else if (s->get_type() == AST::SET) {
-                    process_set(ast_cast<SetNode>(s));
+            if (self_reference) {
+                if (!m_node->ret_type) {
+                    m_node->get_info().throw_exception("Recursive functions must annotate returning type");
                 }
                 else {
-                    throw std::runtime_error("Incorrect AST type");
+                    self_reference->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("function"), args_type);
                 }
             }
+
+            for (auto& s : m_node->statements) {
+                process_statement(s);
+            }
+
             // register external bindings to the lambda
             m_node->bindings.resize(binding_cache.back().size());
             for (const auto& bce : binding_cache.back()) {
@@ -436,21 +466,17 @@ namespace mini {
                 }
             }
 
-            // match the type of last statement (or reconstruct)
-            // the full monad feature will be improved in the future -- where the last statement should be 'return x'
+            // match the type of last statement (or reconstruct). If last statement is not expression, return nil.
             const auto& s_last = m_node->statements.back();
+            pType last_prog_type = s_last->is_expr() ?
+                s_last->as<ExprNode>()->prog_type :
+                std::make_shared<PrimitiveType>(symbol_table->find_type("nil"));
+
             if (!m_node->ret_type) {
-                args_type.push_back(s_last->as<ExprNode>()->prog_type);
-            }
-            else if (s_last->is_expr()) {
-                match_type(args_type.back(), s_last->as<ExprNode>()->prog_type, s_last->get_info());
-            }
-            else if (m_node->ret_type->prog_type->is_primitive() && 
-                m_node->ret_type->prog_type->as<PrimitiveType>()->is_nil()
-                ) {       // nil is allowed to be implicit
+                args_type.push_back(last_prog_type);
             }
             else {
-                s_last->get_info().throw_exception("Statements inside function return non-nil must end with expression");
+                match_type(args_type.back(), last_prog_type, s_last->get_info());
             }
 
             m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("function"), args_type);
@@ -463,6 +489,36 @@ namespace mini {
                 symbol_table->pop_type_scope();
             }
         }
+
+        void process_case(CaseNode* m_node) {
+            auto dummy_var = symbol_table->insert_var(
+                std::make_shared<Symbol>(symbol_table->dummy_var_name(), m_node->lhs->get_info()), VarMetaData::LOCAL, m_node->lhs->prog_type);
+            auto transformed_let = std::make_shared<LetNode>();
+            transformed_let->set_info(m_node->lhs->get_info());
+            transformed_let->symbol = dummy_var->symbol;
+            transformed_let->expr = m_node->lhs;
+
+            m_node->statements.push_back(transformed_let);
+
+            // test the availability of sel and Bool
+            if (!symbol_table->find_var("sel") || !symbol_table->find_var("and") || !symbol_table->find_global_type("Bool")) {
+                m_node->get_info().throw_exception("Cases cannot be parsed before `import std`.");
+            }
+
+            if (!m_node->cases.empty()) {
+                 process_case_branch(m_node->cases.begin(), m_node->cases.end(), dummy_var, m_node->statements);
+            }
+            else{
+                m_node->get_info().throw_exception("No cases in case expression");
+            }
+
+            for (auto& s : m_node->statements) {
+                process_statement(s);
+            }
+        }
+
+        // Desugaring of case statements. No type attribution here.
+        void process_case_branch(std::vector<CaseNode::Case>::iterator m_case, std::vector<CaseNode::Case>::iterator m_case_end, VariableRef dummy_var, std::vector<pAST>& statements);
 
         void process_let(LetNode* m_node) {
 
@@ -478,6 +534,9 @@ namespace mini {
                         std::make_shared<Symbol>("auto", m_node->get_info()));
                     m_node->vtype->prog_type = m_node->expr->prog_type;
                 }
+            }
+            else if (symbol_table->cur_scope() != 0) {
+                m_node->get_info().throw_exception("RHS required in local declaration");
             }
 
             if (symbol_table->cur_scope() != 0) {
@@ -562,7 +621,7 @@ namespace mini {
             }
 
             for (auto& f : m_node->members) {
-                process_let(f.get());
+                process_type(f->vtype);
                 if (t->fields.count(f->symbol->get_name()) > 0) {
                     f->symbol->get_info().throw_exception("Fields redefinition: " + f->symbol->get_name());
                 }
@@ -603,13 +662,11 @@ namespace mini {
                 ref->base = std::make_shared<PrimitiveType>(symbol_table->find_type("object"));
             }
 
+            // TODO F-omega when base_type is kind *->* base members have type depend on arguments.
             for (const auto& [member, meta] : m_node->members) {
-                
                 const auto& member_name = member->symbol->get_name();
                 process_type(member->vtype);
-
                 if (ref->fields.find(member_name) != ref->fields.end()) {
-
                     // virtual field.
                     if (base_ref && base_ref->virtual_fields.find(member_name) != base_ref->virtual_fields.end()) {
                         match_type(base_ref->fields.find(member_name)->second, member->vtype->prog_type, member->get_info());
@@ -622,7 +679,6 @@ namespace mini {
                     ref->fields.insert({ member_name, member->vtype->prog_type });
                     ref->field_names.push_back(member_name);
                 }
-
                 if (meta.is_virtual) {
                     ref->virtual_fields.insert(member_name);
                 }
@@ -638,37 +694,28 @@ namespace mini {
                 std::make_shared<VarNode>(
                     std::make_shared<Symbol>("self", m_node->constructor->get_info())));
 
-            // \<X>.self:A(X) -> {\<Y>.(...)->{} }
-            auto constructor_node = std::make_shared<LambdaNode>();                   // contructor as a global function; Defined at the same location as m_node.
-            auto self_type_node = std::make_shared<TypeNode>(m_node->symbol);         // self must have same type as A
-            constructor_node->set_info(m_node->get_info());
-
+            // \<X>.self:A(X) -> {\(...)->{} }
             // TODO F-omega constructor_node and self_type_node will have quantifier.
+
+            auto self_type_node = TypeNode::make_attributed(std::make_shared<ObjectType>(ref), m_node->get_info());
+            auto constructor_node = std::make_shared<LambdaNode>();                   // contructor as a global function; Defined at the same location as m_node.
+            constructor_node->set_info(m_node->get_info());
             constructor_node->args.push_back({
                 std::make_shared<Symbol>("self", m_node->get_info()),
                 self_type_node
                 });
             constructor_node->statements.push_back(std::static_pointer_cast<AST>(m_node->constructor));
-
-            /* Recursive Functions: Fake a type */
-            // F-omega: may be universal
-            auto constructor_type = std::make_shared<PrimitiveType>(symbol_table->find_type("function"));
-            auto self_type = std::make_shared<ObjectType>(ref);
-
-            constructor_type->args.push_back(self_type);
-            bool has_quantifiers = !m_node->constructor->quantifiers.empty();
-            auto ut = std::make_shared<UniversalType>();
-            auto ft = std::make_shared<PrimitiveType>(symbol_table->find_type("function"));
-            if (has_quantifiers) process_quantifiers(m_node->constructor->quantifiers, ut);
-            for (const auto& a : m_node->constructor->args) { process_type(a.second); ft->args.push_back(a.second->prog_type); }
-            ft->args.push_back(self_type);
-            if (has_quantifiers) { symbol_table->pop_type_scope(); ut->body = ft; constructor_type->args.push_back(ut); }
-            else constructor_type->args.push_back(ft);
-
-            m_node->constructor_ref = symbol_table->insert_constructor(m_node->symbol, ref, constructor_type);
-
-            process_lambda(constructor_node.get());
-            match_type(constructor_node->prog_type, constructor_type, m_node->get_info());  // Checking
+            auto ret_type_node = std::make_shared<TypeNode>();
+            ret_type_node->set_info(m_node->constructor->get_info());
+            ret_type_node->symbol = std::make_shared<Symbol>("function", m_node->constructor->get_info());
+            for (const auto& a : m_node->constructor->args) {
+                ret_type_node->args.push_back(a.second);
+            }
+            ret_type_node->args.push_back(self_type_node);
+            constructor_node->ret_type = ret_type_node;
+            
+            m_node->constructor_ref = symbol_table->insert_constructor(m_node->symbol, ref, NULL);
+            process_lambda(constructor_node.get(), m_node->constructor_ref);    // Note this is recursive.
             m_node->constructor.swap(constructor_node);  // NOTE now the m_node->constructor is changed to the global one with signature A->((...)->A)
 
             // Interface checking

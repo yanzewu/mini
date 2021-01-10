@@ -60,6 +60,14 @@ namespace mini {
         std::vector<std::pair<std::string, const TypeBuilder*>> fields;
     };
 
+    class ObjectTypeBuilder : public TypeBuilder {
+    public:
+        ObjectTypeBuilder(const std::string& s) : TypeBuilder(s) {}
+
+        pType operator()(const SymbolTable&)const override;
+        pType build(SymbolTable&) const override;
+    };
+
     class TypeVariableBuilder : public TypeBuilder {
     public:
 

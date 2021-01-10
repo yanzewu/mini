@@ -35,12 +35,14 @@ class Bool {
     }
 };
 
+let __sel01 = \<X>(cond:int, pass:X, fail:X)->@get<X>([fail, pass], cond);
+
 let True = new Bool(1);
 let False = new Bool(0);
-let and = \(lhs:Bool, rhs:Bool) -> new Bool(@and(lhs.__value, rhs.__value));
-let or = \(lhs:Bool, rhs:Bool) -> new Bool(@or(lhs.__value, rhs.__value));
-let xor = \(lhs:Bool, rhs:Bool) -> new Bool(@xor(lhs.__value, rhs.__value));
-let not = \b:Bool -> new Bool(@not(b.__value));
+let and = \(lhs:Bool, rhs:Bool) -> __sel01<Bool>(@and(lhs.__value, rhs.__value), True, False);
+let or = \(lhs:Bool, rhs:Bool) -> __sel01<Bool>(@or(lhs.__value, rhs.__value), True, False);
+let xor = \(lhs:Bool, rhs:Bool) -> __sel01<Bool>(@xor(lhs.__value, rhs.__value), True, False);
+let not = \b:Bool -> __sel01<Bool>(b.__value, False, True);
 
 let sel = \<X>(cond:Bool, pass:X, fail:X)->@get<X>([fail, pass], cond.__value);
 let sand = \(lhs:function(Bool), rhs:function(Bool))->

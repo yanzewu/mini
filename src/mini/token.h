@@ -32,6 +32,9 @@ namespace mini {
         DASH = 24,
 
         FORALL = 30,
+        CASE = 32,
+        WHEN = 33,
+        RETURN = 34,
 
         IMPORT = 100,
         LET = 101,

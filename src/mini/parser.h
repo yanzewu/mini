@@ -44,6 +44,8 @@ namespace mini {
 
         Ptr<LambdaNode> parse_lambda_wb(bool is_constructor=false);
 
+        Ptr<CaseNode> parse_case_wb();
+
         Ptr<LetNode> parse_func_def_wb();
 
         void parse_quantifier_def_wb(std::vector <std::pair<pSymbol, Ptr<TypeNode>>>& args);

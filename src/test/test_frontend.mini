@@ -8,7 +8,6 @@ let add:function(int, int, int) = @addi;
 let negate:function(int, int) = @negi;
 let pass:function(nil) = \()->{nil}:nil;
 let append:function(array(int), int, array(int));
-let print:function(int, nil);
 
 let v1:int;
 let v2:int = 10;
@@ -52,7 +51,6 @@ def f1(a:int, b:int)->int {
     set a = 5,
     set a = add(a, b),
     let d:int = add(a, b),
-    print(a),
     a
 };
 
@@ -77,10 +75,8 @@ def f4()->int {
         set a = 5,
         set a = add(a, b),
         let c:int = add(a, b),
-        print(a),
         a
     },
-    let nested_v1:int,
     let nested_v2:int = 10,
     let nested_v3:float = 10.23,
     let nested_v4:char = '1',
@@ -158,12 +154,12 @@ set c1.a = 2;
 class C2 extends C1 implements I0 {
     f:function(C1,int),
     g:function(C2,int),
-    new<X>(val:int, x:X) extends C1(val)->{
+    new(val:int, x:array(char)) extends C1(val)->{
         set self.g = \(rhs:C2)->@gei(self.a, rhs.a)
     }
 };
-let c2:C1 = new C2<array(char)>(2, "2");
-let c3 = new C2<array(char)>(2, "2");
+let c2:C1 = new C2(2, "2");
+let c3 = new C2(2, "2");
 
 f5<C1>(c1);
 f5<C1>(c3);

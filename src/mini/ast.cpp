@@ -160,6 +160,17 @@ void LambdaNode::print(OutputStream& os, unsigned indent)const {
     }
 };
 
+void CaseNode::print(OutputStream& os, unsigned indent)const {
+    os.write_white(indent) << "Case ";
+    lhs->print(os, indent + 1);
+    for (size_t i = 0; i < cases.size(); i++) {
+        os.write_white(indent + 1) << "Branch " << i << '\n';
+        cases[i].condition->print(os, indent + 2);
+        if (cases[i].guard) cases[i].guard->print(os, indent + 2);
+        cases[i].expr->print(os, indent + 2);
+    }
+}
+
 void LetNode::print(OutputStream& os, unsigned indent)const {
     os.write_white(indent) << "Let ";
     if (ref) {

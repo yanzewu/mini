@@ -25,6 +25,7 @@ namespace mini {
             FUNCALL,    // term->term
             GETFIELD,
             NEW,
+            CASE,
             TYPE,       // type->type
             TYPEAPPL,   // type->term
             LET,
@@ -126,6 +127,7 @@ namespace mini {
         virtual void print(OutputStream&, unsigned indent)const {};
     protected:
         explicit ExprNode(AST::Type_t tp) : AST(tp), prog_type(NULL) {}
+        ExprNode(AST::Type_t tp, const SymbolInfo& info) : AST(tp, info), prog_type(NULL) {}
 
         // Try print type; Does nothing if type is not defined.
         void print_type(OutputStream& os)const;
@@ -147,23 +149,33 @@ namespace mini {
     public:
 
         pSymbol symbol;
-        VariableRef ref;
+        ConstVariableRef ref;
+        bool skip_attribution = false;
         // AST has the ownship of pSymbol because that's the first place it is stored.
 
         VarNode() : ExprNode(AST::Type_t::VAR), ref(NULL) {}
-        explicit VarNode(const pSymbol& name_) : ExprNode(AST::Type_t::VAR), symbol(name_), ref(NULL) {
-            this->set_info(name_->get_info());
-        }
+        explicit VarNode(const pSymbol& name_) : 
+            ExprNode(AST::Type_t::VAR, name_->get_info()), symbol(name_), ref(NULL) {}
 
         void set_symbol(const pSymbol& symbol) {
             this->symbol = symbol;
         }
 
         // Set the reference of symbol
-        void set_ref(VariableRef ref) {
+        void set_ref(ConstVariableRef ref) {
             this->ref = ref;
         }
         void print(OutputStream& os, unsigned indent)const;
+
+        // Make an attributed variable node.
+        static Ptr<VarNode> make_attributed(ConstVariableRef ref, const SymbolInfo& info) {
+            auto r = std::make_shared<VarNode>();
+            r->set_symbol(std::make_shared<Symbol>(ref->symbol->get_name(), info));
+            r->set_ref(ref);
+            r->set_info(info);
+            r->skip_attribution = true;
+            return r;
+        }
     };
 
     class TupleNode : public ExprNode {
@@ -209,9 +221,10 @@ namespace mini {
         std::vector<Ptr<ExprNode>> args;
         bool is_constructor = false;
 
-        FunCallNode() : ExprNode(AST::Type_t::FUNCALL) {
+        FunCallNode() : ExprNode(AST::Type_t::FUNCALL) {}
+        FunCallNode(const SymbolInfo& info, const Ptr<ExprNode>& caller, const std::vector<Ptr<ExprNode>>& args) : 
+            ExprNode(AST::Type_t::FUNCALL, info), caller(caller), args(args) {}
 
-        }
         void print(OutputStream& os, unsigned indent)const;
     };
 
@@ -223,6 +236,8 @@ namespace mini {
         pSymbol field;
 
         GetFieldNode() : ExprNode(AST::Type_t::GETFIELD), field(NULL) {}
+        GetFieldNode(const SymbolInfo& info, const Ptr<ExprNode>& lhs, const pSymbol& field) :
+            ExprNode(AST::Type_t::GETFIELD, info), lhs(lhs), field(field) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -241,6 +256,7 @@ namespace mini {
         std::vector<std::pair<pSymbol, Ptr<TypeNode>>> quantifiers;
 
         pType prog_type;
+        bool skip_attribution = false;
 
         TypeNode() : AST(AST::Type_t::TYPE), prog_type(NULL) {}
 
@@ -253,6 +269,15 @@ namespace mini {
             return false;
         }
         void print(OutputStream& os, unsigned indent)const;
+
+        // Make an attributed type node
+        static Ptr<TypeNode> make_attributed(pType prog_type, const SymbolInfo& info) {
+            auto r = std::make_shared<TypeNode>();
+            r->prog_type = prog_type;
+            r->info = info;
+            r->skip_attribution = true;
+            return r;
+        }
     };
 
     // new X
@@ -277,6 +302,8 @@ namespace mini {
         std::vector<Ptr<TypeNode>> args;
 
         TypeApplNode() : ExprNode(AST::Type_t::TYPEAPPL), lhs(NULL) {}
+        TypeApplNode(const SymbolInfo& info, const Ptr<ExprNode>& lhs, const std::vector<Ptr<TypeNode>>& args) :
+            ExprNode(AST::Type_t::TYPEAPPL, info), lhs(lhs), args(args) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -294,6 +321,10 @@ namespace mini {
 
         LambdaNode() : ExprNode(AST::Type_t::LAMBDA) {}
 
+        // Make a lambda node without arguments & quantifiers
+        LambdaNode(const SymbolInfo& info, const std::vector<pAST>& statements) : 
+            ExprNode(AST::Type_t::LAMBDA, info),  statements(statements) {}
+
         void print(OutputStream& os, unsigned indent)const;
     };
 
@@ -309,6 +340,7 @@ namespace mini {
 
     protected:
         explicit CommandNode(AST::Type_t tp) : AST(tp) {}
+        CommandNode(AST::Type_t tp, const SymbolInfo& info) : AST(tp, info) {}
     };
 
     class LetNode : public CommandNode {
@@ -321,9 +353,11 @@ namespace mini {
 
         VariableRef ref;
 
-        bool has_init;
+        bool has_init = false;
 
         LetNode() : CommandNode(AST::Type_t::LET), expr(NULL), ref(NULL) {}
+        LetNode(const SymbolInfo& info, const pSymbol& symbol, const Ptr<TypeNode>& vtype, const Ptr<ExprNode>& expr) :
+            CommandNode(AST::Type_t::LET, info), vtype(vtype), expr(expr), ref(NULL) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -335,6 +369,25 @@ namespace mini {
         Ptr<ExprNode> expr;
 
         SetNode() : CommandNode(AST::Type_t::SET), lhs(NULL), expr(NULL) {}
+
+        void print(OutputStream& os, unsigned indent)const;
+    };
+
+    // pattern matching & cases
+    class CaseNode : public ExprNode {
+    public:
+        struct Case {
+            Ptr<ExprNode> condition;    // VarNode/ConstantNode/TupleNode
+            Ptr<ExprNode> guard = NULL; //
+            Ptr<ExprNode> expr;         // Cannot be Null
+        };
+
+        Ptr<ExprNode> lhs;
+        std::vector<Case> cases;
+
+        std::vector<Ptr<AST>> statements;
+
+        CaseNode() : ExprNode(AST::Type_t::CASE) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };

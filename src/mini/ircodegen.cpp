@@ -218,6 +218,7 @@ void IRCodeGenerator::process_let(const LetNode* node, bool create_field) {
     if (node->expr) {
         process_expr(node->expr, node->symbol->get_name());
     }
+    // TODO null
 
     switch (node->ref->source)
     {

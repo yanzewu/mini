@@ -1,5 +1,5 @@
 
-# Syntax of Mini v0.2
+# Syntax of Mini v0.3
 
 general_block := class_decl ';'
         | interface_decl ';'
@@ -15,6 +15,27 @@ import_decl := 'import' id
 import_list := id
         | import_list '.' id
 
+# Classes
+
+class_decl := 'class' id class_decorator* class_body
+        
+class_decorator := 'implements' type
+        | 'extends' type
+
+class_body := '{' decl_list? '}'
+
+decl_list = decl_within_class
+        | decl_list ',' decl_within_class
+
+decl_within_class = decl_decorator? id type_annotation
+        | constructor
+
+constructor = 'new' '(' arg_decl_list? ')' constructor_decorator? '->' '{' function_body '}'
+        | 'new' '(' arg_decl_list? ')' constructor_decorator? '->' stmt
+
+constructor_decorator = 'extends' id '(' arg_list? ')'
+
+decl_decorator := 'virtual'
 
 # Interfaces
 
@@ -27,17 +48,17 @@ id_list := id
 
 interface_body := '{' interface_decl_list? '}'
 
-interface_decl_list := interface_decl_list ',' id ':' type_expr
-        | interface_decl_list ',' id ':' 'Self'
-
+interface_decl_list := interface_decl_list ',' id type_annotation
 
 # Variable definition and expression
 
-var_decl := 'let' id ':' type_expr '=' expr
-        | 'let' id ':' type_expr
+var_decl := 'let' id type_annotation? '=' expr
+        | 'let' id type_annotation
 
 type_expr := type       # in future will add support dynamic types
-        
+
+type_annotation := ':' type
+
 type := id
         | id '(' type_list ')'
         | 'forall' universal_quantifier '.' id
@@ -68,17 +89,15 @@ value := intliteral                     # both positive and negative
         | '(' ')'       # equivalent to nil
         | 'nil'
 
-array := '[' ']'
-        | '[' array_content ']'
+array := '[' array_content? ']'
 array_content := expr
         | array_content ',' expr
 
-tuple := '(' expr ',' tuple_content ')'         # tuple size must > 1
-tuple_content := expr
+tuple := '(' tuple_content ')'
+tuple_content := expr ',' expr         # tuple size must > 1
         | tuple_content ',' expr
 
-structure := '{' '}'
-        | '{' structure_content '}'
+structure := '{' structure_content? '}'
 structure_content := id '=' expr
         | structure_content ',' id '=' expr
 
@@ -87,16 +106,15 @@ structure_content := id '=' expr
 function_decl := 'def' id universal_quantifier? '(' arg_decl_list? ')' '->' type '{' function_body '}'
         | 'def' id universal_quantifier? '(' arg_decl_list? ')' '{' function_body '}'
 
-lambda := '\' universal_quantifier? capture '->' expr
-        | '\' universal_quantifier? capture '->' expr ':' type
-        | '\' universal_quantifier? capture '->' '{' function_body '}'
-        | '\' universal_quantifier? capture '->' '{' function_body '}' ':' type # the types are greedy matched
+lambda := '\' '->' expr type_annotation?
+        | '\' universal_quantifier? capture '->' expr type_annotation?
+        | '\' universal_quantifier? capture '->' '{' function_body '}' type_annotation? # the types are greedy matched
 
-capture := id ':' type
+capture := id type_annotation
         | '(' arg_decl_list? ')'
 
-arg_decl_list := id ':' type
-        | arg_decl_list ',' id ':' type
+arg_decl_list := id type_annotation
+        | arg_decl_list ',' id type_annotation
 
 function_body := stmt                   # function body cannot be empty
         | function_body ',' stmt

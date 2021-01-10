@@ -228,7 +228,7 @@ Ptr<ExprNode> mini::Parser::parse_expr() {
             std::static_pointer_cast<ExprNode>(m_node).swap(prefix);
             break;
         }
-
+        case CASE: prefix = parse_case_wb(); break;
         default:
             cur_token--;
             throw_cur_token("Unkown symbol: " + to_str(keyword));
@@ -328,7 +328,7 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb(bool is_constructor) {
     auto m_node = std::make_shared<LambdaNode>();
     m_node->set_info(get_last_info());
 
-    if (test_keyword_inc(Keyword::LANGLE)) {
+    if (!is_constructor && test_keyword_inc(Keyword::LANGLE)) {
         parse_quantifier_def_wb(m_node->quantifiers);
     }
 
@@ -338,8 +338,7 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb(bool is_constructor) {
         auto type = parse_type();
         m_node->args.push_back({ name, type });
     }
-    else {
-        match_keyword_inc(Keyword::LBRACKET);
+    else if (test_keyword_inc(Keyword::LBRACKET)) {
         if (!test_keyword_inc(Keyword::RBRACKET)) {
             while (1) {
                 auto name = get_id_inc();
@@ -355,7 +354,7 @@ Ptr<LambdaNode> mini::Parser::parse_lambda_wb(bool is_constructor) {
             }
         }
     }
-    if (test_keyword(Keyword::EXTENDS)) {   // will leave "extends" to parse_expr
+    if (is_constructor && test_keyword(Keyword::EXTENDS)) {   // will leave "extends" to parse_expr
         auto m_extend_supernode = parse_expr();
         m_node->statements.push_back(m_extend_supernode);
     }
@@ -485,6 +484,25 @@ void mini::Parser::parse_statement_list(std::vector<Ptr<AST>>& statements) {
         }
         if (!test_keyword_inc(Keyword::COMMA)) break;
     }
+}
+
+Ptr<CaseNode> mini::Parser::parse_case_wb() {
+    auto m_node = std::make_shared<CaseNode>();
+    m_node->set_info(get_last_info());
+    m_node->lhs = parse_expr();
+    match_keyword_inc(Keyword::LCURLY);
+    do {
+        auto c = CaseNode::Case();
+        c.condition = parse_expr();
+        if (test_keyword_inc(Keyword::WHEN)) {
+            c.guard = parse_expr();
+        }
+        match_keyword_inc(Keyword::ARROW);
+        c.expr = parse_expr();
+        m_node->cases.push_back(std::move(c));
+    } while (test_keyword_inc(Keyword::COMMA));
+    match_keyword_inc(Keyword::RCURLY);
+    return m_node;
 }
 
 Ptr<ClassNode> mini::Parser::parse_class_wb() {

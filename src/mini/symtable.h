@@ -92,6 +92,11 @@ namespace mini {
         // insert a variable into the top scope. Throws if already defined.
         VariableRef insert_var(const pSymbol& symbol, VarMetaData::Source source, const pType& prog_type);
 
+        // Get a new name for dummy variable
+        std::string dummy_var_name()const {
+            return "tmp " + std::to_string(var_table_storage[cur_scope()].names.size());
+        }
+
         // Caution: Will add reference to typemeta.
         TypedefRef insert_primitive_type(const pTypedef& typemeta) {
             auto r = type_table.insert({ typemeta->symbol->get_name(), typemeta});

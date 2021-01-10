@@ -89,6 +89,21 @@ pType PrimitiveTypeBuilder::build(SymbolTable& st) const
     return r;
 }
 
+pType ObjectTypeBuilder::operator()(const SymbolTable& st) const
+{
+    auto r = st.find_global_type(s);
+    if (r->is_object()) return std::make_shared<ObjectType>(r->as<ObjectTypeMetaData>());
+    else return NULL;
+}
+
+pType ObjectTypeBuilder::build(SymbolTable& st) const
+{
+    auto r = st.find_global_type(s);
+    if (r->is_object()) return std::make_shared<ObjectType>(r->as<ObjectTypeMetaData>());
+    else return NULL;
+}
+
+
 pType StructTypeBuilder::operator()()const {
     auto r = std::make_shared<StructType>();
     for (const auto& f : fields) {

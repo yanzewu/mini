@@ -179,11 +179,10 @@ void test_parser() {
 
     // Classes
 
-    PARSE("class C1 {m1:int, virtual m2:array(int), new <X,Y>(a:int)->{set self.m1 = a,set self.m2 = [1, 2, 3]} };");
+    PARSE("class C1 {m1:int, virtual m2:array(int), new (a:int)->{set self.m1 = a,set self.m2 = [1, 2, 3]} };");
         REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[0].first)->symbol->get_name() == "m1", s.c_str());
         REQUIRE(ast_cast<LetNode>(ast_cast<ClassNode>(ast[0])->members[1].first)->symbol->get_name() == "m2", s.c_str());
         REQUIRE(ast_cast<ClassNode>(ast[0])->members[1].second.is_virtual, s.c_str());
-        REQUIRE(ast[0]->as<ClassNode>()->constructor->quantifiers[0].first->get_name() == "X", s.c_str());
         REQUIRE(ast[0]->as<ClassNode>()->constructor->statements.size() == 2, s.c_str());
         
     PARSE("class C2 extends C1 implements I1 {new(b:int) extends C1<int, char>(b)->{new C1<int, float>(2)}, m3:int };"); 
@@ -195,6 +194,19 @@ void test_parser() {
         REQUIRE(ast[0]->as<ClassNode>()->constructor->statements[1]->as<FunCallNode>()->caller->as<NewNode>()->symbol->get_name() == "C1", s.c_str());
         REQUIRE(ast[0]->as<ClassNode>()->constructor->statements[1]->as<FunCallNode>()->caller->as<NewNode>()->type_args[1]->symbol->get_name() == "float", s.c_str());
         
+    // Pattern Match
+    PARSE("case {x=2, y=3} {1 when ge(x, 0) -> \\x:int->case1,(a, b, 0)->case a{b->\\->{ case2 },_->case3}, {a=a}->{a=case4}};");
+        REQUIRE(ast[0]->as<CaseNode>()->lhs->as<StructNode>()->children[1].first->get_name() == "y", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases.size() == 3, s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[0].condition->as<ConstantNode>()->value == Constant(1), s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[0].guard->as<FunCallNode>()->caller->as<VarNode>()->symbol->get_name() == "ge", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[0].expr->as<LambdaNode>()->statements[0]->as<VarNode>()->symbol->get_name() == "case1", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[1].condition->as<TupleNode>()->children[1]->as<VarNode>()->symbol->get_name() == "b", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[1].expr->as<CaseNode>()->cases[0].expr->as<LambdaNode>()->statements[0]->as<VarNode>()->symbol->get_name() == "case2", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[1].expr->as<CaseNode>()->cases[1].condition->as<VarNode>()->symbol->get_name() == "_", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[2].condition->as<StructNode>()->children[0].first->get_name() == "a", s.c_str());
+        REQUIRE(ast[0]->as<CaseNode>()->cases[2].expr->as<StructNode>()->children[0].second->as<VarNode>()->symbol->get_name() == "case4" , s.c_str());
+
     summary();
 
 #undef PARSE
