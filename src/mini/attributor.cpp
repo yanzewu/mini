@@ -4,88 +4,170 @@
 
 using namespace mini;
 
-void Attributor::process_case_branch(std::vector<CaseNode::Case>::iterator m_case, std::vector<CaseNode::Case>::iterator m_case_end, VariableRef dummy_var, std::vector<pAST>& statements) {
-
-    const auto& condition_info = m_case->condition->get_info();
-    Ptr<ExprNode> condition_expr = NULL;
-    Ptr<ExprNode> dummy_var_node = std::make_shared<VarNode>(
-        std::make_shared<Symbol>(dummy_var->symbol->get_name(), m_case->condition->get_info())
-        );  // This cannot be attributed, since it may be binded.
-
-    switch (m_case->condition->get_type())
-    {
-    case AST::Type_t::VAR: {        // let var = dummy_var
-        auto m = std::make_shared<LetNode>(
-            condition_info,
-            m_case->condition->as<VarNode>()->symbol,
-            nullptr,
-            dummy_var_node
-            );
-        statements.push_back(m);
+// turn a constant to a boxed one.
+Ptr<ExprNode> Attributor::make_boxed_constant_node(const Ptr<ConstantNode>& node) {
+    auto m = std::make_shared<FunCallNode>();
+    auto m_lhs = std::make_shared<NewNode>();
+    m->set_info(node->get_info());
+    m_lhs->set_info(node->get_info());
+    m->caller = m_lhs;
+    
+    switch (node->value.get_type()) {
+    case Constant::Type_t::BOOL:{
+        // After Enum is introduced, lower case true/false will be no longer valid. 
+        // True and False will be two enum flags (also variables) -- equivalent to .index.eq(1) and .index.eq(0)
+        if (node->value == Constant(true)){
+            return VarNode::make_attributed(symbol_table->find_var("True"), node->get_info());
+        }
+        else{
+            return VarNode::make_attributed(symbol_table->find_var("False"), node->get_info());
+        }
         break;
     }
-    case AST::Type_t::CONSTANT: {   // dummy_var.equals(constant)
-        auto m_gf = std::make_shared<GetFieldNode>(
-            condition_info,
-            dummy_var_node,
-            std::make_shared<Symbol>("equals", condition_info)
-            );
-        condition_expr = std::make_shared<FunCallNode>(
-            condition_info,
-            m_gf,
-            std::vector<Ptr<ExprNode>>{m_case->condition});
+    case Constant::Type_t::CHAR: {
+        m_lhs->symbol = std::make_shared<Symbol>("Char", node->get_info());
+        m->args.push_back(node);
+        break;
+    }
+    case Constant::Type_t::INT: {
+        m_lhs->symbol = std::make_shared<Symbol>("Int", node->get_info());
+        m->args.push_back(node);
+        break;
+    }
+    case Constant::Type_t::FLOAT: {
+        m_lhs->symbol = std::make_shared<Symbol>("Float", node->get_info());
+        m->args.push_back(node);
+        break;
+    }
+    case Constant::Type_t::STRING: {
+        m_lhs->symbol = std::make_shared<Symbol>("String", node->get_info());
+        m->args.push_back(node);
+        break;
+    }
+    default: node->get_info().throw_exception("Unrecognized constant");
+    }
+    return m;
+}
+
+// let lhs = rhs;
+pAST make_let_node(const pSymbol& lhs, const Ptr<ExprNode>& rhs) {
+    auto m = std::make_shared<LetNode>(lhs->get_info(), lhs, nullptr, rhs);
+    return m;
+}
+
+// lhs.eq(rhs)
+Ptr<ExprNode> make_equal_node(const Ptr<ExprNode>& lhs, const Ptr<ExprNode>& rhs) {
+    auto m_gf = std::make_shared<GetFieldNode>(
+        lhs->get_info(),
+        lhs,
+        std::make_shared<Symbol>("eq", lhs->get_info())
+        );
+    auto m = std::make_shared<FunCallNode>(
+        lhs->get_info(),
+        m_gf,
+        std::vector<Ptr<ExprNode>>{rhs});
+    return m;
+}
+
+// name(args)
+Ptr<ExprNode> make_builtin_funcall_node(const std::string& name, const SymbolInfo& info, const std::initializer_list<Ptr<ExprNode>>&& args, const SymbolTable* symbol_table) {
+    auto m = std::make_shared<FunCallNode>(
+        info,
+        VarNode::make_attributed(symbol_table->find_var(name), info),
+        std::vector<Ptr<ExprNode>>{args}
+    );
+    return m;
+}
+
+// name<type>(args)
+Ptr<ExprNode> make_builtin_funcall_node(const std::string& name, const SymbolInfo& info, const pType& prog_type, const std::initializer_list<Ptr<ExprNode>>&& args, const SymbolTable* symbol_table) {
+    auto m_typeappl = std::make_shared<TypeApplNode>(
+        info,
+        VarNode::make_attributed(symbol_table->find_var(name), info),
+        std::vector<Ptr<TypeNode>>{TypeNode::make_attributed(prog_type, info)}
+    );
+
+    auto m = std::make_shared<FunCallNode>(
+        info,
+        m_typeappl,
+        std::vector<Ptr<ExprNode>>{args});
+    return m;
+}
+
+
+Ptr<LambdaNode> Attributor::process_case_branch(const CaseNode::Case& m_case, const pSymbol& arg_name, const pSymbol& previous_branch_name, const pType& arg_type, bool is_last_one) {
+
+    const auto& condition_info = m_case.condition->get_info();
+
+    auto m_node = std::make_shared<LambdaNode>();
+    m_node->set_info(condition_info);
+    Ptr<ExprNode> condition_expr = NULL;
+    Ptr<ExprNode> arg_var_node = std::make_shared<VarNode>(
+        std::make_shared<Symbol>(arg_name->get_name(), m_case.condition->get_info())
+        );  // This cannot be attributed, since it may be binded.
+
+    switch (m_case.condition->get_type())
+    {
+    case AST::Type_t::VAR: {        // let var = lhs_var
+        m_node->statements.push_back(make_let_node(m_case.condition->as<VarNode>()->symbol, arg_var_node));
+        break;
+    }
+    case AST::Type_t::CONSTANT: {   // lhs_var.eq(constant)
+        condition_expr = make_equal_node(arg_var_node, m_case.condition);
+        // TODO NOTE I'm boxing every constant here. In the future such boxing will be default so should not be explicitly given here.
         break;
     }
     case AST::Type_t::TUPLE: {      // structure binding
-        // if dummy_var is not tuple => fail
-        auto tuple_type = dummy_var->prog_type->as<PrimitiveType>();
-        if (tuple_type->args.size() != m_case->condition->as<TupleNode>()->children.size()) {
-            condition_info.throw_exception(
-                StringAssembler("Number of elements not match: Expect ")(tuple_type->args.size())(", got ")(m_case->condition->as<TupleNode>()->children.size())());
+        if (!arg_type->is_primitive() || arg_type->as<PrimitiveType>()->type_name() != PrimitiveTypeMetaData::TUPLE) {
+            m_case.condition->get_info().throw_exception(StringAssembler("Not a tuple type: ")(*arg_type)());
         }
-        for (size_t i = 0; i < tuple_type->args.size(); i++) {
-            auto& child = m_case->condition->as<TupleNode>()->children[i];
-            /*          get
-                    <Type>
-                (dummy_var, i)
-            */
-            Ptr<ExprNode> get_node = std::make_shared<FunCallNode>(
-                child->get_info(),
-                std::make_shared<TypeApplNode>(
-                    condition_info,
-                    VarNode::make_attributed(symbol_table->find_var("@get"), condition_info),
-                    std::vector<Ptr<TypeNode>>{TypeNode::make_attributed(tuple_type->args[i], condition_info)}
-            ),
-                std::vector<Ptr<ExprNode>>{
-                dummy_var_node,
-                    std::make_shared<ConstantNode>(Constant(int(i)))
-            }
-            );
 
-            if (child->get_type() == AST::Type_t::VAR) {    // let child = get<TYPE>(dummy_var, i);
-                auto m = std::make_shared<LetNode>(
-                    child->get_info(),
-                    child->as<VarNode>()->symbol,
-                    nullptr,
-                    get_node
-                    );
-                statements.push_back(m);
+        auto tuple_type = arg_type->as<PrimitiveType>();
+        if (tuple_type->args.size() != m_case.condition->as<TupleNode>()->children.size()) {
+            condition_info.throw_exception(
+                StringAssembler("Number of elements not match: Expect ")(tuple_type->args.size())(", got ")(m_case.condition->as<TupleNode>()->children.size())());
+        }
+
+        for (int i = 0; i < tuple_type->args.size(); i++) {
+            auto& child = m_case.condition->as<TupleNode>()->children[i];
+            auto get_node = make_builtin_funcall_node("@get", child->get_info(), tuple_type->args[i], 
+                { arg_var_node, std::make_shared<ConstantNode>(Constant(i), child->get_info())}, symbol_table);  // get<TYPE>(lhs_var, i)
+
+            if (child->get_type() == AST::Type_t::VAR) {    // let child = get<TYPE>(lhs_var, i);
+                m_node->statements.push_back(make_let_node(child->as<VarNode>()->symbol, get_node));
             }
-            else if (child->get_type() == AST::Type_t::CONSTANT) {  // condition_expr = and(condition_expr, child.equals(get<TYPE>(dummy_var, i)))
-                auto m_gf = std::make_shared<GetFieldNode>(
-                    child->get_info(),
-                    child,
-                    std::make_shared<Symbol>("equals", condition_info)
-                    );
-                auto m = std::make_shared<FunCallNode>(
-                    child->get_info(),
-                    VarNode::make_attributed(symbol_table->find_var("and"), child->get_info()),
-                    std::vector<Ptr<ExprNode>>{
-                    condition_expr,
-                        get_node
-                });
-                auto t = std::static_pointer_cast<ExprNode>(m);
-                condition_expr.swap(t);
+            else if (child->get_type() == AST::Type_t::CONSTANT) {  // condition_expr = and(condition_expr, get<TYPE>(lhs_var, i).eq(child))
+                auto equal_node = make_equal_node(get_node, child);
+                if (condition_expr) {
+                    auto m = make_builtin_funcall_node("and", child->get_info(), { condition_expr, equal_node}, symbol_table);
+                    condition_expr.swap(m);
+                }
+                else {
+                    condition_expr = equal_node;
+                }
+            }
+            else {
+                child->get_info().throw_exception("Unrecognized structure binding");
+            }
+        }
+        break;
+    }
+    case AST::Type_t::STRUCT: {
+        // we don't check the type of getfield. will leave that to getfield.
+        for (const auto& [m_field, child] : m_case.condition->as<StructNode>()->children) {
+            auto get_node = std::make_shared<GetFieldNode>(condition_info, arg_var_node, m_field);   // lhs_var.m_field
+            if (child->get_type() == AST::Type_t::VAR) {  // let child = lhs_var.m_field
+                m_node->statements.push_back(make_let_node(child->as<VarNode>()->symbol, get_node));
+            }
+            else if (child->get_type() == AST::Type_t::CONSTANT) {  // condition_expr = and(condition_expr, lhs_var.m_field.eq(child))
+                auto equal_node = make_equal_node(get_node, child);
+                if (condition_expr) {
+                    auto m = make_builtin_funcall_node("and", child->get_info(), { condition_expr, equal_node }, symbol_table);
+                    condition_expr.swap(m);
+                }
+                else {
+                    condition_expr = equal_node;
+                }
             }
             else {
                 child->get_info().throw_exception("Unrecognized structure binding");
@@ -94,77 +176,35 @@ void Attributor::process_case_branch(std::vector<CaseNode::Case>::iterator m_cas
         break;
     }
     default:
-        condition_info.throw_exception("Invalid case expression. Must be id/constant/tuple");
+        condition_info.throw_exception("Invalid case expression. Must be id/constant/tuple/struct");
     }
 
-    if (m_case->guard && !condition_expr) {
-        condition_expr = m_case->guard;
+    if (m_case.guard && !condition_expr) {
+        condition_expr = m_case.guard;
     }
-    else if (m_case->guard) {    // sel(condition_expr, \->_case.guard, \->False)()
-        auto cond_call_caller = std::make_shared<TypeApplNode>();
-        cond_call_caller->lhs = VarNode::make_attributed(symbol_table->find_var("sel"), m_case->guard->get_info());
-        cond_call_caller->args.push_back(TypeNode::make_attributed(
-            PrimitiveTypeBuilder("function")(ObjectTypeBuilder("Bool")).build(*symbol_table),
-            m_case->guard->get_info()
-        ));
-
-        auto cond_lhs = std::make_shared<LambdaNode>(m_case->guard->get_info(), std::vector<pAST>{ m_case->guard });
-        auto cond_rhs = std::make_shared<LambdaNode>(m_case->guard->get_info(), std::vector<pAST>{
-            VarNode::make_attributed(symbol_table->find_var("False"), m_case->guard->get_info())
+    else if (m_case.guard) {    // sel(condition_expr, \->_case.guard, \->False)()
+        auto cond_lhs = std::make_shared<LambdaNode>(m_case.guard->get_info(), std::vector<pAST>{ m_case.guard });
+        auto cond_rhs = std::make_shared<LambdaNode>(m_case.guard->get_info(), std::vector<pAST>{
+            VarNode::make_attributed(symbol_table->find_var("False"), m_case.guard->get_info())
         });
-
-        auto cond_call = std::make_shared<FunCallNode>(
-            m_case->guard->get_info(),
-            cond_call_caller,
-            std::vector<Ptr<ExprNode>>{condition_expr, cond_lhs, cond_rhs});
-        auto t = std::static_pointer_cast<ExprNode>(cond_call);
-        condition_expr.swap(t);
+        auto sel_call = make_builtin_funcall_node("sel", m_case.guard->get_info(), {condition_expr, cond_lhs, cond_rhs}, symbol_table);
+        Ptr<ExprNode> sel = std::make_shared<FunCallNode>(m_case.guard->get_info(), sel_call, std::vector<Ptr<ExprNode>>{});
+        condition_expr.swap(sel);
     }
 
     if (condition_expr) {
-        /* final_expr =
-                       sel
-           +sel     <function(dumm_var_type)>
-           +lhs   (condition_expr, \->expr, \->{rhs_statements } )
-            ()
-        */
-        auto sel_function_type = std::make_shared<PrimitiveType>(
-            symbol_table->find_type("function"),
-            std::vector<pType>{dummy_var->prog_type});
-
-        auto sel_lhs = std::make_shared<TypeApplNode>(
-            condition_info,
-            VarNode::make_attributed(symbol_table->find_var("sel"), condition_info),
-            std::vector<Ptr<TypeNode>>{TypeNode::make_attributed(sel_function_type, condition_info)}
-        );
-
-        auto br_lhs = std::make_shared<LambdaNode>(condition_info, std::vector<pAST>{m_case->expr});
-        auto br_rhs = std::make_shared<LambdaNode>();
+        /* final_expr = sel(condition_expr, \->expr, next_case )() */
+        auto br_lhs = std::make_shared<LambdaNode>(condition_info, std::vector<pAST>{m_case.expr});
+        auto br_rhs = std::make_shared<VarNode>(previous_branch_name);
         br_rhs->set_info(condition_info);
-        if (m_case + 1 == m_case_end) {    // undefined()
-            auto m_node = std::make_shared<FunCallNode>(
-                m_case->expr->get_info(),
-                VarNode::make_attributed(symbol_table->find_var("undefined"), m_case->expr->get_info()),
-                std::vector<Ptr<ExprNode>>{}
-            );
-            br_rhs->statements.push_back(m_node);
-        }
-        else {
-            process_case_branch(m_case + 1, m_case_end, dummy_var, br_rhs->statements);
-        }
-        auto sel = std::make_shared<FunCallNode>(
-            condition_info,
-            sel_lhs,
-            std::vector<Ptr<ExprNode>>{condition_expr, br_lhs, br_rhs});
-        statements.push_back(std::make_shared<FunCallNode>(
-            condition_info,
-            sel,
-            std::vector<Ptr<ExprNode>>{}));
+        auto sel_call = make_builtin_funcall_node("sel", condition_info, { condition_expr, br_lhs, br_rhs }, symbol_table);
+        m_node->statements.push_back(std::make_shared<FunCallNode>(condition_info, sel_call, std::vector<Ptr<ExprNode>>{}));
     }
     else {  // then that's it -- it always matched.
-        statements.push_back(m_case->expr);
-        if (++m_case != m_case_end) {
-            condition_info.throw_exception("Cases will not be matched");
+        m_node->statements.push_back(m_case.expr);
+        if (!is_last_one) {
+            condition_info.throw_exception("Next cases will be unreachable");
         }
     }
+    return m_node;
 }

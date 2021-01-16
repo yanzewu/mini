@@ -7,8 +7,7 @@ let total_count:int = 0;
 def pass_test()->nil {
     printf("Test case %d: passed. ", [total_count]),
     set passed_count = @addi(passed_count, 1),
-    set total_count = @addi(total_count, 1),
-    nil
+    set total_count = @addi(total_count, 1)
 };
 
 def fail_test()->nil {
@@ -16,7 +15,7 @@ def fail_test()->nil {
     set total_count = @addi(total_count, 1)
 };
 
-def require(v:int, msg:array(char))->nil {
+def require(v:int, msg:String)->nil {
     @get<function(nil)>([
         \()->{pass_test(), print(msg), print("\n")}, 
         \()->{fail_test(), print(msg), print("\n")}
@@ -39,9 +38,6 @@ let vc1:char = 'a';
 let vc2:char = '\n';
 let vs1:array(char) = "";
 let vs2:array(char) = "12345";
-let vb1:bool = true;
-let vn1:nil = nil;
-let vn2:nil = ();
 
 # Let/set
 
@@ -69,11 +65,9 @@ let vo4:top = ["12345"];
 
 set vo1 = "abc";
 set vo2 = [[1]];
-#set vo3 = {};
-#set vo4 = {a=2, b="123"};
 
 let vao1:array(top) = [1,2,3];
-set vao1 = "12345";
+set vao1 = ['2','3','4'];
 
 let vto1:tuple(top, top);
 let vt1:tuple(int, int);
@@ -85,13 +79,13 @@ set vf3 = vf2;
 
 # Expression: Aggresion types
 
-let vai1:array(int) = [];
-let vaii1:array(array(int)) = [[]];
+let vai1:array(Int) = [];
+let vaii1:array(array(Int)) = [[]];
 set vaii1 = [[5]];
 set vaii1 = [[5, 6], [4], []];
 
 let vtoo:tuple(top, top) = (1, '2');
-let vtia:tuple(int, array(char)) = (1, "2");
+let vtia:tuple(Int, String) = (1, "2");
 
 # Expression: Lambda
 
@@ -99,7 +93,7 @@ let vfii1:function(int, int, int) = \(x:int, y:int)->@addi(x, y):int;
 let vfii2:function(int, int, int) = \(x:int, y:int)->{
     set x = @addi(x, 1), @addi(x, y)
 }:int;
-let vfi1:function(int) = \()->2:int;
+let vfi1:function(int) = \()->{let a:int =2, a};
 let vfi2:function(int) = \()->{vi1}:int;
 
 require(@eqi(2, vfii1(1, 1)), "1+1=2");
@@ -136,14 +130,14 @@ require(@lef(1.0, 2.0), "<=");
 require(@gtf(2.0, -1.0), ">");
 require(@gef(-1.0, -1.0), ">=");
 
-require(@eqi(@ageti([1,2,3], 2), 3), "ageti");
-
 let va:array(int) = @arrayi(3);
 @aseti(va, 2, 5);
 require(@eqi(@ageti(va, 2), 5), "aseti");
 require(@eqi(@len(va), 12), "len");
 
-let s:array(char) = @format("% -+5.5f", [123.45678]);
+let float_arr = @arrayf(1);
+@asetf(float_arr, 0, 123.45678);
+let s:array(char) = @format("% -+5.5f", float_arr);
 require(@eqi(@ctoi(@aget(s, 4)), 46), "format");
 require(@eqi(@ctoi(@aget(s, 9)), 56), "format");
 
@@ -155,7 +149,7 @@ require(@eqi(@get<function(int, int)>(va2, 2)(1), -1), "get/set");
 let va3_src = [1,2,3];
 let va3_dst = [4,5,6];
 @copy(va3_src, 4, 8, va3_dst, 4);
-require(@eqi(@muli(@ageti(va3_dst, 0), @muli(@ageti(va3_dst, 1), @ageti(va3_dst, 2))), 24)
+require(@eqi(@muli(aget<Int>(va3_dst, 0).__value, @muli(aget<Int>(va3_dst, 1).__value, aget<Int>(va3_dst, 2).__value)), 24)
 , "copy");
 
 # interfaces
@@ -164,7 +158,9 @@ interface I0 {
     a:int,
     b:float
 };
-let i0:I0 = {a=1, b=2.0};
+let int_1:int = 1;
+let float_2:float = 2.0;
+let i0:I0 = {a=int_1, b=float_2};
 require(@eqi(i0.a, 1), "getfield");
 
 def f<X implements I0>(x:X)->int {
@@ -172,12 +168,12 @@ def f<X implements I0>(x:X)->int {
 };
 
 interface I1 extends I0 {
-    c:int
+    c:Int
 };
 
 require(@eqi(f<I0>(i0), 1), "interface");
-require(@eqi(f<I0>({a=1, b=2.0}), 1), "interface");
-require(@eqi(f<I1>({a=1, b=2.0, c=3}), 1), "interface");
+require(@eqi(f<I0>({a=int_1, b=float_2}), 1), "interface");
+require(@eqi(f<I1>({a=int_1, b=float_2, c=3}), 1), "interface");
 
 # classes
 
@@ -201,24 +197,29 @@ require(@eqi(c1.val, 1), "class");
 require(@eqi(c2.val, 2), "class");
 require(@eqf(c3.val2, 4.0), "class");
 
-let requireb = \(v:Bool, s:array(char))->require(v.__value, s);
+let requireb = \(v:Bool, s:String)->require(v.__value, s);
 
 requireb(True, "bool");
-requireb(True.equals(True), "bool");
-requireb(True.equals(not(False)), "bool");
+requireb(True.eq(True), "bool");
+requireb(True.eq(not(False)), "bool");
 
 # system F
 
 def ff(f:forall<X>.function(X,X))->forall<X>.function(X,X){
-    \<X>(x:X)->f<X>(f<X>(x)):X
+    \<X>(x:X)->f(f(x))
 };
+let uv5 = \f:forall<X,Y>.function(X,Y,Y) -> \<X>(x:X) -> (f(x,1), f(x,'2'));
+let uv5_2 = \f:forall<X,Y>.function(X,Y,X) -> \<X>(x:X) -> (f(x,1), f(x,'2'));
+
 require(@eqi( ff(\<X>(x:X)->x:X)<I0>(i0).a, 1), "rank 2 function");
+requireb(fst<Int, Char>(uv5(seq)(3)).eq(1), "type inferrence");
+requireb(fst<Float, Float>(uv5_2(const)(2.0)).eq(2.0), "type inferrence");
 
 # system library functions
 
-requireb(id<Bool>(True), "id");
-requireb(const<Bool,Bool>(True, False), "const");
-requireb(seq<Bool,Bool>(False, True), "seq");
+requireb(id(True), "id");
+requireb(const(True, False), "const");
+requireb(seq(False, True), "seq");
 requireb(dot<Bool,Bool,Bool>(not, not)(True), "dot");
 
 requireb(fst<Bool,Bool>((True, False)), "fst");
@@ -256,6 +257,59 @@ requireb(equals_c1(until<C1>(
     \x:C1->lt_c1(new C1(100), x),
     \x:C1->mul_c1(x, new C1(2))
     )(one_c1), new C1(128)), "until");
+
+# Case Expressions
+
+let my_if = \<X>(c:Bool, ctrue:X, cfalse:X)->case c {
+    true -> ctrue,
+    false -> cfalse
+};
+
+requireb(my_if(True, True, False), "case #1");
+requireb(my_if(False, False, True), "case #1");
+
+let quadrant = \(x:Int, y:Int)->
+case (x, y) {
+    (0, b) -> 5,
+    (a, 0) -> 6,
+    (a, b) when not(or(a.lt(0), b.lt(0))) -> 1,
+    (a, b) when and(a.lt(0), not(b.lt(0))) -> 2,
+    (a, b) when and(a.lt(0), b.lt(0)) -> 3,
+    otherwise -> 4
+};
+
+requireb(quadrant(1, 2).eq(1), "case #2");
+requireb(quadrant(-1, 2).eq(2), "case #2");
+requireb(quadrant(1, -2).eq(4), "case #2");
+requireb(quadrant(-1, -2).eq(3), "case #2");
+requireb(quadrant(0, 2).eq(5), "case #2");
+requireb(quadrant(1, 0).eq(6), "case #2");
+
+class Shape {
+    is_circle:Bool,
+    d: array(Float),
+    new(x:Float, y:Float, is_circle:Bool)->{
+        case is_circle {
+            true -> \->{set self.d = [x]}(),
+            false -> \->{set self.d = [x, y]}()
+        },
+        set self.is_circle = is_circle
+    }
+};
+
+let area = \s:Shape -> case s {
+    {is_circle=true, d=d} -> aget<Float>(d, 0).mul(aget<Float>(d, 0)).mul(pi),
+    {is_circle=false, d=d} -> aget<Float>(d, 0).mul(aget<Float>(d, 1))
+};
+
+let circle = new Shape(1.0, 2.0, True);
+let square = new Shape(2.0, 2.0, False);
+
+requireb(circle.is_circle, "case #3");
+requireb(not(square.is_circle), "case #3");
+requireb(area(circle).eq(3.1415926), "case #3");
+requireb(area(square).eq(4.0), "case #3");
+
 
 summary();
 @exit();

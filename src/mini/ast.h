@@ -137,9 +137,12 @@ namespace mini {
     class ConstantNode : public ExprNode {
     public:
         Constant value;
+        Ptr<ExprNode> boxed_expr = nullptr;
+        bool skip_boxing = false;
 
         ConstantNode() : ExprNode(AST::Type_t::CONSTANT) {}
         explicit ConstantNode(const Constant& val) : ExprNode(AST::Type_t::CONSTANT), value(val) {}
+        ConstantNode(const Constant& val, const SymbolInfo& info) : ExprNode(AST::Type_t::CONSTANT, info), value(val) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -173,6 +176,7 @@ namespace mini {
             r->set_symbol(std::make_shared<Symbol>(ref->symbol->get_name(), info));
             r->set_ref(ref);
             r->set_info(info);
+            r->prog_type = ref->prog_type;
             r->skip_attribution = true;
             return r;
         }
@@ -357,7 +361,7 @@ namespace mini {
 
         LetNode() : CommandNode(AST::Type_t::LET), expr(NULL), ref(NULL) {}
         LetNode(const SymbolInfo& info, const pSymbol& symbol, const Ptr<TypeNode>& vtype, const Ptr<ExprNode>& expr) :
-            CommandNode(AST::Type_t::LET, info), vtype(vtype), expr(expr), ref(NULL) {}
+            CommandNode(AST::Type_t::LET, info), symbol(symbol), vtype(vtype), expr(expr), ref(NULL) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -385,7 +389,7 @@ namespace mini {
         Ptr<ExprNode> lhs;
         std::vector<Case> cases;
 
-        std::vector<Ptr<AST>> statements;
+        Ptr<ExprNode> parsed_expr;
 
         CaseNode() : ExprNode(AST::Type_t::CASE) {}
 

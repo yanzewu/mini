@@ -244,7 +244,7 @@ std::vector<BuiltinSymbolGenerator::BuiltinFunctionInfo> BuiltinSymbolGenerator:
         {{ByteCode::LOADLA, 0, 0}, {ByteCode::LOADLI, 0, 1}, {ByteCode::LOADLA, 0, 2}, {ByteCode::STOREIA}, {ByteCode::RETN} }},
 
     /* Error */
-    { "@throw", &(*new TB("function"))("top")("bottom"), {{ByteCode::LOADLA, 0, 0}, {ByteCode::THROW} }},
+    { "@throw", &(*new TB("function"))(*array_char)("bottom"), {{ByteCode::LOADLA, 0, 0}, {ByteCode::THROW} }},
     { "@exit", &(*new TB("function"))("nil"), {{ByteCode::HALT}} },
 
     /* Native */

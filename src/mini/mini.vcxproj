@@ -123,6 +123,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ast.cpp" />
+    <ClCompile Include="attributor.cpp" />
     <ClCompile Include="ir.cpp" />
     <ClCompile Include="ircodegen.cpp" />
     <ClCompile Include="lexer.cpp" />

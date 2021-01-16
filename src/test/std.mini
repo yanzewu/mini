@@ -18,19 +18,19 @@ let curry = \<X,Y,Z>(f:function(X,Y,Z))->{
 let uncurry = \<X,Y,Z>(f:function(X,function(Y,Z)))->{
     \(x:X,y:Y)->f(x)(y)
 };
-let error = @throw;
+
 let undefined = \()->@throw("undefined");
 
-let aget = \<X>(a:array(X), i:int)->@get<X>(a, i);
-let aset = \<X>(a:array(X), i:int, v:X)->@set<X>(a, i, v);
+
+# Bool
 
 class Nil {};
 class Bool {
     __value:int,
-    equals:function(Bool, Bool),
+    eq:function(Bool, Bool),
     new(value:int)->{
         set self.__value = @nei(value, 0),  # !=0 => 1
-        set self.equals = \rhs:Bool->
+        set self.eq = \rhs:Bool->
             new Bool(@eqi(rhs.__value, self.__value))
     }
 };
@@ -39,16 +39,71 @@ let __sel01 = \<X>(cond:int, pass:X, fail:X)->@get<X>([fail, pass], cond);
 
 let True = new Bool(1);
 let False = new Bool(0);
-let and = \(lhs:Bool, rhs:Bool) -> __sel01<Bool>(@and(lhs.__value, rhs.__value), True, False);
-let or = \(lhs:Bool, rhs:Bool) -> __sel01<Bool>(@or(lhs.__value, rhs.__value), True, False);
-let xor = \(lhs:Bool, rhs:Bool) -> __sel01<Bool>(@xor(lhs.__value, rhs.__value), True, False);
-let not = \b:Bool -> __sel01<Bool>(b.__value, False, True);
+let and = \(lhs:Bool, rhs:Bool) -> __sel01(@and(lhs.__value, rhs.__value), True, False);
+let or = \(lhs:Bool, rhs:Bool) -> __sel01(@or(lhs.__value, rhs.__value), True, False);
+let xor = \(lhs:Bool, rhs:Bool) -> __sel01(@xor(lhs.__value, rhs.__value), True, False);
+let not = \b:Bool -> __sel01(b.__value, False, True);
 
 let sel = \<X>(cond:Bool, pass:X, fail:X)->@get<X>([fail, pass], cond.__value);
 let sand = \(lhs:function(Bool), rhs:function(Bool))->
-    sel<function(Bool)>(lhs(), rhs, \()->False)();
+    sel(lhs(), rhs, \()->False)();
 let sor = \(lhs:function(Bool), rhs:function(Bool))->
-    sel<function(Bool)>(lhs(), \()->True, rhs)();
+    sel(lhs(), \()->True, rhs)();
+
+# Char
+
+class Char {
+    __value:char,
+    eq:function(Char, Bool),
+    new(v:char) -> {
+        set self.__value = v
+    }
+};
+
+class String {
+    __value:array(char),
+    new(v:array(char)) -> {
+        set self.__value = v
+    }
+};
+
+let error = \s:String -> @throw(s.__value);
+
+# Integer
+
+class Int {
+    __value:int,
+    eq:function(Int, Bool),
+    lt:function(Int, Bool),
+    add:function(Int, Int),
+    mul:function(Int, Int),
+    new(v:int) -> {
+        set self.__value = v,
+        set self.eq = \rhs:Int->new Bool(@eqi(self.__value, rhs.__value)),
+        set self.lt = \rhs:Int->new Bool(@lti(self.__value, rhs.__value)),
+        set self.add = \rhs:Int->new Int(@addi(self.__value, rhs.__value)),
+        set self.mul = \rhs:Int->new Int(@muli(self.__value, rhs.__value))
+    }
+};
+
+
+let aget = \<X>(a:array(X), i:Int)->@get<X>(a, i.__value);
+let aset = \<X>(a:array(X), i:Int, v:X)->@set<X>(a, i.__value, v);
+
+class Float {
+    __value:float,
+    eq:function(Float, Bool),
+    add:function(Float, Float),
+    mul:function(Float, Float),
+    new(v:float) -> {
+        set self.__value = v,
+        set self.eq = \rhs:Float->new Bool(@eqf(self.__value, rhs.__value)),
+        set self.add = \rhs:Float->new Float(@addf(self.__value, rhs.__value)),
+        set self.mul = \rhs:Float->new Float(@mulf(self.__value, rhs.__value))
+    }
+};
+
+let pi = 3.1415926;
 
 # Cleaner using pattern matching
 let fix:forall<X>.function( function(function(X,X), function(X,X)), function(X,X));
@@ -59,7 +114,7 @@ set fix = \<X>(f:function(function(X,X), function(X,X)))->{
 let until:forall<X>.function(function(X,Bool), function(X,X), function(X,X));
 set until = \<X>(p:function(X,Bool), f:function(X,X)) -> {
     \cur_val:X->
-        sel<function(X)>(
+        sel(
             p(cur_val),
             \()->cur_val,
             \()->until<X>(p, f)(f(cur_val))
@@ -68,8 +123,8 @@ set until = \<X>(p:function(X,Bool), f:function(X,X)) -> {
 
 # io
 
-let stdin = 0;
-let stdout = 1;
-let print = \s:array(char) -> @write(stdout, s);
-let input = \()-> @read(stdin, 1024, '\n');
-let printf = \(a:array(char), v:array(top))->@write(stdout, @format(a, v));
+let stdin:int = 0;
+let stdout:int = 1;
+let print = \s:String -> @write(stdout, s.__value);
+let input = \()-> new String(@read(stdin, 1024, '\n'));
+let printf = \(a:String, v:array(top))->@write(stdout, @format(a.__value, v));

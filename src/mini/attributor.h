@@ -169,10 +169,10 @@ namespace mini {
             }
         }
 
-        void process_expr(const Ptr<ExprNode>& m_node) {
+        void process_expr(const Ptr<ExprNode>& m_node, const pType& lvalue_prog_type = nullptr) {
             switch (m_node->get_type())
             {
-            case AST::CONSTANT: process_constant(ast_cast<ConstantNode>(m_node)); break;
+            case AST::CONSTANT: process_constant(ast_cast<ConstantNode>(m_node), lvalue_prog_type); break;
             case AST::VAR: process_var(ast_cast<VarNode>(m_node)); break;
             case AST::TUPLE: process_tuple(ast_cast<TupleNode>(m_node)); break;
             case AST::STRUCT: process_struct(ast_cast<StructNode>(m_node)); break;
@@ -180,6 +180,7 @@ namespace mini {
             case AST::FUNCALL: process_funcall(ast_cast<FunCallNode>(m_node)); break;
             case AST::GETFIELD: process_getfield(ast_cast<GetFieldNode>(m_node)); break;
             case AST::NEW: process_new(ast_cast<NewNode>(m_node)); break;
+            case AST::CASE: process_case(ast_cast<CaseNode>(m_node)); break;
             case AST::TYPEAPPL: process_typeappl(ast_cast<TypeApplNode>(m_node)); break;
             case AST::LAMBDA: process_lambda(ast_cast<LambdaNode>(m_node)); break;
             default:
@@ -187,7 +188,23 @@ namespace mini {
             }
         }
 
-        void process_constant(ConstantNode* m_node) {
+        void process_constant(ConstantNode* m_node, const pType& lvalue_prog_type) {
+
+            // if not a constant or prog_type is unboxed atomic && prog_type, skip; otherwise box it
+            if (!m_node->skip_boxing && (
+                !lvalue_prog_type || 
+                !lvalue_prog_type->is_primitive() || 
+                !lvalue_prog_type->as<PrimitiveType>()->is_unboxed() ||
+                m_node->value.get_type() == Constant::Type_t::BOOL)) {
+
+                auto t = std::make_shared<ConstantNode>(m_node->value, m_node->get_info()); // copy it; otherwise will deadlock
+                t->skip_boxing = true;
+                m_node->boxed_expr = make_boxed_constant_node(t);
+                process_expr(m_node->boxed_expr);
+                m_node->prog_type = m_node->boxed_expr->prog_type;
+                return;
+            }
+
             switch (m_node->value.get_type())
             {
             case Constant::Type_t::NIL: m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("nil")); break;
@@ -200,6 +217,8 @@ namespace mini {
                 break;
             }
         }
+
+        Ptr<ExprNode> make_boxed_constant_node(const Ptr<ConstantNode>& node);
 
         void process_var(VarNode* m_node) {
             if (m_node->skip_attribution) {
@@ -284,9 +303,10 @@ namespace mini {
 
         void process_array(ArrayNode* m_node) {
 
-            pType maximum_type = std::make_shared<PrimitiveType>(symbol_table->find_type("bottom"));
+            pType maximum_type;
 
             if (m_node->children.empty()) {
+                maximum_type = std::make_shared<PrimitiveType>(symbol_table->find_type("bottom"));
             }
             else {  // type inference
                 process_expr(m_node->children[0]);
@@ -294,20 +314,7 @@ namespace mini {
 
                 for (size_t i = 1; i < m_node->children.size(); i++) {
                     process_expr(m_node->children[i]);
-                    auto result_l_to_r = maximum_type->partial_compare(m_node->children[i]->prog_type.get());
-                    if (result_l_to_r == Type::Ordering::GREATER || result_l_to_r == Type::Ordering::EQUAL) {
-                    }
-                    else {  // maybe less?
-                        auto result_r_to_l = m_node->children[i]->prog_type->partial_compare(maximum_type.get());
-                        if (result_r_to_l == Type::Ordering::GREATER) {
-                            maximum_type = m_node->children[i]->prog_type;
-                        }
-                        else {
-                            m_node->get_info().throw_exception("Type not compatible");
-                            // The ideal maximum type would be the super type of both. However, finding such a type
-                            // may be undecideable (in System F) and is not very meaningful, so I just throw here.
-                        }
-                    }
+                    make_maximum_type(maximum_type, m_node->children[i]->prog_type, m_node->get_info());
                 }
             }
             m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("array"), std::vector<pType>({ maximum_type }));
@@ -334,29 +341,84 @@ namespace mini {
         void process_funcall(FunCallNode* m_node) {
 
             process_expr(m_node->caller);
-            const auto& func_type_1 = m_node->caller->prog_type;
-            if (!func_type_1->is_primitive() || !func_type_1->as<PrimitiveType>()->is_function()) {
+            const auto& func_type_raw = m_node->caller->prog_type;
+            const UniversalType* func_type_univ = nullptr;
+            const PrimitiveType* func_body = NULL;
+            pType func_type_applied;
+
+            // Check types: universal/normal
+            if (func_type_raw->is_primitive() && func_type_raw->as<PrimitiveType>()->is_function()) {
+                func_body = func_type_raw->as<PrimitiveType>();
+                func_type_applied = func_type_raw;
+            }
+            else if (func_type_raw->is_universal() && func_type_raw->as<UniversalType>()->body->is_primitive() &&
+                func_type_raw->as<UniversalType>()->body->as<PrimitiveType>()->is_function()) {
+                func_body = func_type_raw->as<UniversalType>()->body->as<PrimitiveType>();
+                func_type_univ = func_type_raw->as<UniversalType>();
+            }
+            else {
                 m_node->get_info().throw_exception(StringAssembler("Not a function: ")(*m_node->caller->prog_type)());
             }
-            auto func_type = func_type_1->as<PrimitiveType>();
 
-            if (func_type->args.size() - 1 != m_node->args.size()) {
-                m_node->get_info().throw_exception(StringAssembler("Expect ")(func_type->args.size() - 1)(" args, got ")(m_node->args.size())());
+            // Match arg number
+            if (func_body->args.size() - 1 != m_node->args.size()) {
+                m_node->get_info().throw_exception(StringAssembler("Expect ")(func_body->args.size() - 1)(" args, got ")(m_node->args.size())());
             }
+
+            // Process expr & Boxing constants
             for (size_t i = 0; i < m_node->args.size(); i++) {
-                process_expr(m_node->args[i]);
+                process_expr(m_node->args[i], func_body->args[i]);
+            }
+            
+            // Type inferrance
+            if (func_type_univ) {
+                auto func_type = func_type_univ->body->as<PrimitiveType>();
+
+                std::vector<pType> actual_args;
+                for (const auto& a : m_node->args) actual_args.push_back(a->prog_type);
+                if (func_type->args.size() - 1 != m_node->args.size()) {
+                    m_node->get_info().throw_exception(StringAssembler("Expect ")(func_type->args.size() - 1)(" args, got ")(m_node->args.size())());
+                }
+                std::vector<pType> inferred_args = std::vector<pType>(func_type_univ->quantifiers.size(), nullptr);
+                infer_arguments(func_type->args.begin(), func_type->args.end() - 1, actual_args.begin(), inferred_args, m_node->get_info(), 0);
+                for (size_t i = 0; i < inferred_args.size(); i++) {   // check inferred results
+                    if (!inferred_args[i]) m_node->get_info().throw_exception(StringAssembler("Type argument #")(i + 1)(" cannot be inferred")());
+                }
+                func_type_applied = func_type_univ->instanitiate(inferred_args, m_node->get_info());
+            }
+
+            // Match argument types
+            auto func_type = func_type_applied->as<PrimitiveType>();
+            for (size_t i = 0; i < m_node->args.size(); i++) {
                 match_type(func_type->args[i], m_node->args[i]->prog_type, m_node->args[i]->get_info());
             }
             m_node->prog_type = func_type->args.back();
-
         }
 
+        void infer_arguments(std::vector<pType>::const_iterator arg_type_begin, std::vector<pType>::const_iterator arg_type_end, 
+            std::vector<pType>::const_iterator actual_type_begin, std::vector<pType>& results, const SymbolInfo& info, unsigned stack_level) {
+
+            for (auto a = arg_type_begin, t = actual_type_begin; a != arg_type_end; a++, t++) {
+                // here we only do naked type variables -- ideally we should 'compare and infer' for argument types; but I will see if it is necessary
+                if ((*a)->is_universal_variable() && (*a)->as<UniversalTypeVariable>()->stack_id == stack_level) {
+                    auto arg_id = (*a)->as<UniversalTypeVariable>()->arg_id;
+                    if (results[arg_id]) {
+                        make_maximum_type(results[arg_id], *t, info);
+                    }
+                    else {
+                        results[arg_id] = *t;
+                    }
+                }
+            }
+        }
+
+
         void process_new(NewNode* m_node) {
-            auto constructor_ref = symbol_table->find_var(SymbolTable::constructor_name(m_node->symbol->name), m_node->symbol->get_info());
-            if (!constructor_ref) m_node->symbol->get_info().throw_exception("Type constructor not defined: " + m_node->symbol->name);
             const auto& [type_ref, stack_id] = symbol_table->find_type(m_node->symbol.get());
             if (!type_ref) m_node->symbol->get_info().throw_exception("Type not defined: " + m_node->symbol->name);
             if (!type_ref->is_object()) m_node->symbol->get_info().throw_exception("Not an object type: " + m_node->symbol->name);
+            auto constructor_ref = symbol_table->find_var(SymbolTable::constructor_name(m_node->symbol->name), m_node->symbol->get_info());
+            if (!constructor_ref) m_node->symbol->get_info().throw_exception("Type constructor not defined: " + m_node->symbol->name);
             m_node->type_ref = type_ref->as<ObjectTypeMetaData>();
             m_node->constructor_ref = constructor_ref;
 
@@ -437,7 +499,7 @@ namespace mini {
 
             if (self_reference) {
                 if (!m_node->ret_type) {
-                    m_node->get_info().throw_exception("Recursive functions must annotate returning type");
+                    m_node->get_info().throw_exception("Recursive functions must annotate the returning type");
                 }
                 else {
                     self_reference->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("function"), args_type);
@@ -474,6 +536,7 @@ namespace mini {
 
             if (!m_node->ret_type) {
                 args_type.push_back(last_prog_type);
+                m_node->ret_type = TypeNode::make_attributed(last_prog_type, m_node->get_info());
             }
             else {
                 match_type(args_type.back(), last_prog_type, s_last->get_info());
@@ -491,14 +554,26 @@ namespace mini {
         }
 
         void process_case(CaseNode* m_node) {
-            auto dummy_var = symbol_table->insert_var(
-                std::make_shared<Symbol>(symbol_table->dummy_var_name(), m_node->lhs->get_info()), VarMetaData::LOCAL, m_node->lhs->prog_type);
-            auto transformed_let = std::make_shared<LetNode>();
-            transformed_let->set_info(m_node->lhs->get_info());
-            transformed_let->symbol = dummy_var->symbol;
-            transformed_let->expr = m_node->lhs;
+            
+            /* The process of case expressions has two stages: (1) split it into separated lambdas;
+            (2) process these lambdas. Here I use (sort of) CPS style to write this -- each lambda looks like
+            \ -> sel(condition, present, future)();
+            All the statements are then moved into a lambda so finally it looks like as a single function call
+                \n:T->{
+                    let Sn = \->sel<function(T)>(Cn, \->En, undefined)(),
+                    ...
+                    let S2 = \->sel<function(T)>(C2, \->E2, S3)(),
+                    let S1 = \->sel<function(T)>(C1, \->E1, S2)(),
+                    S1()
+                }(expr)
+            */
 
-            m_node->statements.push_back(transformed_let);
+            auto m_lambda_node = std::make_shared<LambdaNode>();
+            m_lambda_node->set_info(m_node->get_info());
+            process_expr(m_node->lhs);
+            pType arg_type = m_node->lhs->prog_type;   // T
+            auto arg_name = std::make_shared<Symbol>("case#arg", m_node->get_info());
+            m_lambda_node->args.push_back({ arg_name, TypeNode::make_attributed(arg_type, m_node->get_info()) });   // n:T
 
             // test the availability of sel and Bool
             if (!symbol_table->find_var("sel") || !symbol_table->find_var("and") || !symbol_table->find_global_type("Bool")) {
@@ -506,33 +581,46 @@ namespace mini {
             }
 
             if (!m_node->cases.empty()) {
-                 process_case_branch(m_node->cases.begin(), m_node->cases.end(), dummy_var, m_node->statements);
+                pSymbol previous_branch_name = std::make_shared<Symbol>("undefined", m_node->get_info());
+                int case_id = m_node->cases.size();
+                for (auto m_case = m_node->cases.rbegin(); m_case != m_node->cases.rend(); m_case++) { 
+                    // let current_case = m_case_branch [which uses previous_case];
+
+                    // TODO type inference so that branch_type is not necesssary
+                    auto m_branch = process_case_branch(*m_case, arg_name, previous_branch_name, arg_type, m_case == m_node->cases.rbegin());
+                    auto m_branch_name = std::make_shared<Symbol>("case#" + std::to_string(case_id--), m_node->get_info());
+                    auto m_assignment = std::make_shared<LetNode>(m_case->condition->get_info(), m_branch_name, nullptr, m_branch);
+                    m_lambda_node->statements.push_back(m_assignment);
+                    previous_branch_name.swap(m_branch_name);
+                }
+                m_lambda_node->statements.push_back(std::make_shared<FunCallNode>(previous_branch_name->get_info(),
+                    std::make_shared<VarNode>(previous_branch_name), std::vector<Ptr<ExprNode>>{}));   // current_case()
+
+                auto m_funcall = std::make_shared<FunCallNode>(m_node->get_info(), m_lambda_node, std::vector<Ptr<ExprNode>>{m_node->lhs}); // <lambda>(expr)
+                process_funcall(m_funcall.get());
+                m_node->parsed_expr = m_funcall;
+                m_node->prog_type = m_node->parsed_expr->prog_type;
             }
             else{
                 m_node->get_info().throw_exception("No cases in case expression");
             }
-
-            for (auto& s : m_node->statements) {
-                process_statement(s);
-            }
         }
 
         // Desugaring of case statements. No type attribution here.
-        void process_case_branch(std::vector<CaseNode::Case>::iterator m_case, std::vector<CaseNode::Case>::iterator m_case_end, VariableRef dummy_var, std::vector<pAST>& statements);
+        Ptr<LambdaNode> process_case_branch(const CaseNode::Case& m_case, const pSymbol& arg_name, const pSymbol& previous_branch_name, 
+            const pType& arg_type, bool is_last_one);
 
         void process_let(LetNode* m_node) {
 
             if (m_node->vtype) process_type(m_node->vtype);
 
             if (m_node->expr) {
-                process_expr(m_node->expr);
+                process_expr(m_node->expr, m_node->vtype ? m_node->vtype->prog_type : nullptr);
                 if (m_node->vtype) {
                     match_type_in_decl(m_node->vtype->prog_type, m_node->expr->prog_type, m_node->get_info());
                 }
                 else {
-                    m_node->vtype = std::make_shared<TypeNode>(
-                        std::make_shared<Symbol>("auto", m_node->get_info()));
-                    m_node->vtype->prog_type = m_node->expr->prog_type;
+                    m_node->vtype = TypeNode::make_attributed(m_node->expr->prog_type, m_node->get_info());
                 }
             }
             else if (symbol_table->cur_scope() != 0) {
@@ -569,7 +657,7 @@ namespace mini {
 
                     ref->has_assigned = true;
                     lhs->ref = ref;
-                    process_expr(m_node->expr);
+                    process_expr(m_node->expr, ref->prog_type);
 
                     match_type(lhs->ref->prog_type, m_node->expr->prog_type, m_node->get_info());
 
@@ -750,6 +838,27 @@ namespace mini {
         // similar as match_type, except allowing contravariant assign with struct => class
         unsigned match_type_in_decl(const pType& lhs, const pType& rhs, const SymbolInfo& info) {    
             return match_type(lhs, rhs, info);
+        }
+
+
+        // Always lift lhs to maximum
+        void make_maximum_type(pType& lhs, const pType& rhs, const SymbolInfo& info) {
+            auto result_l_to_r = lhs->partial_compare(rhs.get());
+            if (result_l_to_r == Type::Ordering::GREATER || result_l_to_r == Type::Ordering::EQUAL) {
+                
+            }
+            else {  // maybe less?
+                auto result_r_to_l = rhs->partial_compare(lhs.get());
+                if (result_r_to_l == Type::Ordering::GREATER) {
+                    auto p = rhs;
+                    lhs.swap(p);
+                }
+                else {
+                    info.throw_exception(StringAssembler("Cannot infer a common maximum type of ")(*lhs)(" and ")(*rhs)());
+                    // The ideal maximum type would be the super type of both. However, finding such a type
+                    // may be undecideable (in System F) and is not very meaningful, so I just throw here.
+                }
+            }
         }
 
     private:

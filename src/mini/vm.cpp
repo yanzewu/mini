@@ -163,7 +163,7 @@ void VM::handle_error(const RuntimeError& e) {
 		// if pc \in exception range then terminate_flag <- false and pc is set. But we will see if that's necessary here.
 
 		try {
-			const auto& ln = lnt->query(pc_func, pc);
+			const auto& ln = lnt->query(pc_func, pc > 1 ? pc - 1 : pc);
 			const FunctionInfo* fi = irprog->fetch_constant(cur_function->info_index)->as<FunctionInfo>();
 			std::string filename;
 			if (fi->symbol_info.is_absolute()) {

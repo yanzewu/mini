@@ -157,6 +157,12 @@ namespace mini {
 
         bool is_nil()const { return pref()->is_nil(); }
         bool is_function()const { return pref()->is_function(); }
+        bool is_unboxed()const { // char,int,float,array(char)
+            return type_name() == Primitive_Type_t::CHAR || type_name() == Primitive_Type_t::INT || type_name() == Primitive_Type_t::FLOAT ||
+                type_name() == Primitive_Type_t::NIL || 
+                (type_name() == Primitive_Type_t::ARRAY && 
+                    args.size() == 1 && args[0]->is_primitive() && args[0]->as<PrimitiveType>()->type_name() == Primitive_Type_t::CHAR);
+        }
         bool is_singlet()const {return pref()->is_singlet(); }
         bool is_list_like()const { return pref()->is_list_like();}
 

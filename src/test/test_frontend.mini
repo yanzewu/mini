@@ -1,13 +1,16 @@
 
-# Pre-definitions
 
 import std;
 123;
-let multiply:function(int, int, int) = @muli;
-let add:function(int, int, int) = @addi;
-let negate:function(int, int) = @negi;
-let pass:function(nil) = \()->{nil}:nil;
+
+# Let Bindings
+
+let multiply:function(Int, Int, Int);
+let add:function(Int, Int, Int);
+let negate:function(Int, Int);
 let append:function(array(int), int, array(int));
+
+# Constants
 
 let v1:int;
 let v2:int = 10;
@@ -16,30 +19,37 @@ let v3:float = 10.23;
 let v4:char = '1';
 let v4_2:char = '\n';
 let v4_3:char = ' ';
-let v5:bool = true;
+let v9:int = @addi(2,3);
+let v9_2:int = @addi(v9, 3);
+
+let v1c:Int = 1;
+let v2c:Int = multiply(1, 2);
+let v3c:Char = '1';
+let v4c:Bool = true;
+
+# Tuple, Arrays, Structs
+
+let v11:tuple(Int, Char) = (1, '2');
+let v12:array(Int) = [1,2,3];
+let v12_2:array(Int) = [1,multiply(new Int(v2), 2), add(3, 5)];
+let v12_3:array(Int) = [1];
+let v12_4:array(int) = [];
+let v12_5:array(array(Int)) = [[1]];
+let v12_6:array(Int) = [];
+let v13 = {a=1, b='2', c=[1], d={a=1, b=2}};
+
+# Lambdas
+
 let v8:function(int, array(int), array(int)) =
-    \(a:int, l:array(int))->append(l, a):array(int)
-;
+    \(a:int, l:array(int))->append(l, a);
 let v8_2:function(int, array(int), array(int)) =
     \(a:int, l:array(int))->{
-        let b:int = add(a, 2),
+        let b:int = @addi(a, 2),
         append(l, b)
-    }:array(int)
-;
-
-let v9:int = add(2,3);
-let v9_2:int = add(v9, 3);
+    };
 let v10:function(int, array(int), array(int)) = v8;
-let v12:array(int) = [1,2,3];
-let v12_2:array(int) = [1,multiply(v2, 2), add(3, 5)];
-let v12_3:array(int) = [1];
-let v12_4:array(int) = [];
-let v12_5:array(array(int)) = [[1]];
-let v13:nil = nil;
 
-# function definition
-
-def f1(a:int, b:int)->int {
+def f1(a:Int, b:Int)->Int {
     add(a, b),
     add(add(a, b), add(a, b)),
     negate(add(a, b)),
@@ -50,20 +60,16 @@ def f1(a:int, b:int)->int {
     add(a, b),
     set a = 5,
     set a = add(a, b),
-    let d:int = add(a, b),
+    let d:Int = add(a, b),
     a
 };
 
-def f2(a:int, b:int)->nil {
-    nil
-};
-
-def f3()->int {
+def f3()->Int {
     2
 };
 
-def f4()->int {
-    def nested_f1(a:int, b:int)->int {
+def f4()->Int {
+    def nested_f1(a:Int, b:Int)->Int {
         add(a, b),
         add(add(a, b), add(a, b)),
         negate(add(a, b)),
@@ -74,7 +80,7 @@ def f4()->int {
         add(a, b),
         set a = 5,
         set a = add(a, b),
-        let c:int = add(a, b),
+        let c = add(a, b),
         a
     },
     let nested_v2:int = 10,
@@ -82,23 +88,23 @@ def f4()->int {
     let nested_v4:char = '1',
     let nested_v4_2:char = '\n',
     let nested_v4_3:char = ' ',
-    let nested_v5:bool = true,
     let nested_v8:function(int, array(int), array(int)) =
-        \(a:int, l:array(int))->append(l, a):array(int)
+        \(a:int, l:array(int))->append(l, a)
     ,
     let nested_v8_2:function(int, array(int), array(int)) =
         \(a:int, l:array(int))->{
-            let b:int = add(a, 2),
+            let b:int = @addi(a, 2),
             let c:int = nested_v2,
             append(l, b)
-        }:array(int)
+        }
     ,
-    let v9:int = add(2,3),
-    let v9_2:int = add(v9, 3),
+    let v9 = add(2,3),
+    let v9_2 = add(v9, 3),
     let v10:function(int, array(int), array(int)) = v8,
     1
 };
 
+# System F
 
 let uv1:forall<X>.function(X,X);
 let uv2:forall<X>.function(X,X) = \<X>(x:X)->x:X;
@@ -106,24 +112,29 @@ set uv1 = uv2;
 let uv3:function(forall<X>.function(X,X), forall<X>.function(X,X)) = \(f:forall<X>.function(X,X))->{
     \<X>(x:X)->f<X>(f<X>(x)):X
 }:forall<X>.function(X,X);
+let uv3_2 = \f:forall<X>.function(X,X) -> \<X>(x:X) -> f(f(x));
+let uv4 = uv3(id);
+let uv5 = \f:forall<X,Y>.function(X,Y,Y) -> \<X>(x:X) -> (f(x,1), f(x,'2'));
+let uv5_2 = \f:forall<X,Y>.function(X,Y,X) -> \<X>(x:X) -> (f(x,1), f(x,'2'));
+fst<Int, Char>(uv5(seq)(1)).eq(2);
+fst<Float, Float>(uv5_2(const)(1.0)).eq(2.0);
+
+# Interfaces
 
 interface I0 {
-    a:int
-};
-
-def f5<X implements I0>(x:X)->int{
-    x.a
+    a:Int
 };
 
 interface I1 {
-    m1:int,
-    m2:function(int, int),
+    m1:Int,
+    m2:function(Int, Int),
     m3:forall<X>.function(X,X)
 };
 
 interface I2 extends I1 {
-    m4:float
+    m4:Float
 };
+
 
 interface I3 {
     m5:I1,
@@ -135,27 +146,37 @@ let i0:I0 = {a=2};
 let a0 = i0.a;
 let i2:I2 = {m1=1, m2=negate, m3=uv1, m4=2.0};
 
-interface I0_prime {a:int, b:float};
+# Bound Checking
+
+interface I0_prime {a:Int, b:Float};
+
+def f5<X implements I0>(x:X)->Int{
+    x.a
+};
 
 f5<I0_prime>({a=2, b=5.0});
 f5<I0>(i0);
 
+let f6 = \<T implements I0>(t:T) -> const(t, 2);
+
+# Classes
+
 class C1 implements I0 {
-    a:int,
-    virtual f:function(C1,int),
-    new (val:int)->{
+    a:Int,
+    virtual f:function(C1,Bool),
+    new (val:Int)->{
         set self.a = val,
-        set self.f = \(rhs:C1)->@eqi(self.a, rhs.a)
+        set self.f = \(rhs:C1)->self.a.eq(rhs.a)
     }
 };
 let c1 = new C1(1);
 set c1.a = 2;
 
 class C2 extends C1 implements I0 {
-    f:function(C1,int),
-    g:function(C2,int),
-    new(val:int, x:array(char)) extends C1(val)->{
-        set self.g = \(rhs:C2)->@gei(self.a, rhs.a)
+    f:function(C1,Bool),
+    g:function(C2,Bool),
+    new(val:Int, x:String) extends C1(val)->{
+        set self.g = \(rhs:C2)->self.a.lt(rhs.a)
     }
 };
 let c2:C1 = new C2(2, "2");
@@ -163,3 +184,34 @@ let c3 = new C2(2, "2");
 
 f5<C1>(c1);
 f5<C1>(c3);
+
+# Case Expressions
+
+case True {
+    true -> print("true"),
+    false -> print("false"),
+    otherwise -> printf("other = %s", [otherwise])
+};
+
+case (1, 2) {
+    (a, 0) -> print("b is 0"),
+    (a, b) when not(b.eq(new Int(0))) -> print("b is not 0"),
+    (0, b) when b.eq(new Int(0)) -> print("otherwise")
+};
+
+class Point {
+    x:Int,
+    y:Int,
+    new(x:Int, y:Int)->{
+        set self.x = x,
+        set self.y = y
+    }
+};
+
+let p = new Point(1, 2);
+case p {
+    {x=1} -> p.x,
+    {y=2, x=a} -> a,
+    {y=3, x=x} -> x.add(new Int(1)),
+    {y=r, x=s} -> s.add(r)
+};

@@ -76,6 +76,7 @@ void IRCodeGenerator::process_expr(const Ptr<ExprNode>& node, const std::string&
     case AST::FUNCALL: process_funcall(node->as<FunCallNode>()); break;
     case AST::GETFIELD: process_getfield(node->as<GetFieldNode>(), NULL); break;
     case AST::NEW: process_new(node->as<NewNode>()); break;
+    case AST::CASE: process_expr(node->as<CaseNode>()->parsed_expr); break;
     case AST::TYPEAPPL: process_expr(node->as<TypeApplNode>()->lhs); break;
     case AST::LAMBDA: process_lambda(node->as<LambdaNode>(), name); break;
     default:
@@ -84,6 +85,11 @@ void IRCodeGenerator::process_expr(const Ptr<ExprNode>& node, const std::string&
 }
 
 void IRCodeGenerator::process_constant(const ConstantNode* node) {
+    if (node->boxed_expr) {
+        process_expr(node->boxed_expr);
+        return;
+    }
+
     switch (node->value.get_type())
     {
     case Constant::Type_t::NIL: emit({ ByteCode::SHIFT }, node->get_info()); break;

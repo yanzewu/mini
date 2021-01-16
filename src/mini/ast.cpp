@@ -10,6 +10,8 @@ void ExprNode::print_type(OutputStream& os)const {
 
 
 void ConstantNode::print(OutputStream& os, unsigned indent)const {
+    if (boxed_expr) return boxed_expr->print(os, indent);
+
     os.write_white(indent) << "Constant ";
 
     print_type(os);
@@ -84,7 +86,7 @@ void NewNode::print(OutputStream& os, unsigned indent) const {
 
     os.write_white(1);
     print_type(os);
-
+    os << '\n';
 }
 
 void TypeNode::print(OutputStream& os, unsigned indent)const {
@@ -145,22 +147,28 @@ void LambdaNode::print(OutputStream& os, unsigned indent)const {
         }
         os.write_white(indent + 1) << ">";
     }
+    if (!args.empty()) os.write_white(indent + 1) << "[args]\n";
     for (const auto& a : args) {
         os.write_white(indent + 1) << a.first->name << " = \n";
         a.second->print(os, indent + 1);
     }
+    if (!bindings.empty()) os.write_white(indent + 1) << "[bindings]\n";
     for (const auto& b : bindings) {
         os.write_white(indent + 1) << *b << "\n";
     }
-    os.write_white(indent + 1) << "ret = ";
+    os.write_white(indent + 1) << "[return]\n";
     if (ret_type) ret_type->print(os, indent + 1);
-    else os.write_white(indent + 1) << "auto";
+    else os.write_white(indent + 1) << "auto\n";
+    os.write_white(indent + 1) << "[statements]\n";
     for (const auto& st : statements) {
         st->print(os, indent + 1);
     }
 };
 
 void CaseNode::print(OutputStream& os, unsigned indent)const {
+    if (parsed_expr) {
+        return parsed_expr->print(os, indent);
+    }
     os.write_white(indent) << "Case ";
     lhs->print(os, indent + 1);
     for (size_t i = 0; i < cases.size(); i++) {
