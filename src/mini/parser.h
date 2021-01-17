@@ -20,7 +20,7 @@ namespace mini {
 
     public:
         
-        void parse(const std::vector<Token>& token_buffer, std::vector<Ptr<AST>>& ast_buffer, ErrorManager* error_manager = NULL);
+        void parse(const std::vector<Token>& token_buffer, std::vector<Ptr<AST>>& ast_buffer, ErrorManager* error_manager = nullptr);
 
     private:
 

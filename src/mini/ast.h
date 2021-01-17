@@ -126,8 +126,8 @@ namespace mini {
 
         virtual void print(OutputStream&, unsigned indent)const {};
     protected:
-        explicit ExprNode(AST::Type_t tp) : AST(tp), prog_type(NULL) {}
-        ExprNode(AST::Type_t tp, const SymbolInfo& info) : AST(tp, info), prog_type(NULL) {}
+        explicit ExprNode(AST::Type_t tp) : AST(tp), prog_type(nullptr) {}
+        ExprNode(AST::Type_t tp, const SymbolInfo& info) : AST(tp, info), prog_type(nullptr) {}
 
         // Try print type; Does nothing if type is not defined.
         void print_type(OutputStream& os)const;
@@ -156,9 +156,9 @@ namespace mini {
         bool skip_attribution = false;
         // AST has the ownship of pSymbol because that's the first place it is stored.
 
-        VarNode() : ExprNode(AST::Type_t::VAR), ref(NULL) {}
+        VarNode() : ExprNode(AST::Type_t::VAR), ref(nullptr) {}
         explicit VarNode(const pSymbol& name_) : 
-            ExprNode(AST::Type_t::VAR, name_->get_info()), symbol(name_), ref(NULL) {}
+            ExprNode(AST::Type_t::VAR, name_->get_info()), symbol(name_), ref(nullptr) {}
 
         void set_symbol(const pSymbol& symbol) {
             this->symbol = symbol;
@@ -239,7 +239,7 @@ namespace mini {
         Ptr<ExprNode> lhs;
         pSymbol field;
 
-        GetFieldNode() : ExprNode(AST::Type_t::GETFIELD), field(NULL) {}
+        GetFieldNode() : ExprNode(AST::Type_t::GETFIELD), field(nullptr) {}
         GetFieldNode(const SymbolInfo& info, const Ptr<ExprNode>& lhs, const pSymbol& field) :
             ExprNode(AST::Type_t::GETFIELD, info), lhs(lhs), field(field) {}
 
@@ -262,7 +262,7 @@ namespace mini {
         pType prog_type;
         bool skip_attribution = false;
 
-        TypeNode() : AST(AST::Type_t::TYPE), prog_type(NULL) {}
+        TypeNode() : AST(AST::Type_t::TYPE), prog_type(nullptr) {}
 
         // non-universal type only
         explicit TypeNode(const pSymbol& symbol) : AST(AST::TYPE), symbol(symbol) {
@@ -292,10 +292,10 @@ namespace mini {
         Ptr<VarNode> self_arg;                  // for extends. Represents the self parameter in extends A => new_A(self)
         std::vector<Ptr<TypeNode>> type_args;   // type arguments.
 
-        VariableRef constructor_ref = NULL;            // ref to constructor function A->(...->A)
-        const ObjectTypeMetaData* type_ref = NULL;     // ref to the object type
+        VariableRef constructor_ref = nullptr;            // ref to constructor function A->(...->A)
+        const ObjectTypeMetaData* type_ref = nullptr;     // ref to the object type
 
-        NewNode() : ExprNode(AST::Type_t::NEW), self_arg(NULL) {}
+        NewNode() : ExprNode(AST::Type_t::NEW), self_arg(nullptr) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -305,7 +305,7 @@ namespace mini {
         Ptr<ExprNode> lhs;
         std::vector<Ptr<TypeNode>> args;
 
-        TypeApplNode() : ExprNode(AST::Type_t::TYPEAPPL), lhs(NULL) {}
+        TypeApplNode() : ExprNode(AST::Type_t::TYPEAPPL), lhs(nullptr) {}
         TypeApplNode(const SymbolInfo& info, const Ptr<ExprNode>& lhs, const std::vector<Ptr<TypeNode>>& args) :
             ExprNode(AST::Type_t::TYPEAPPL, info), lhs(lhs), args(args) {}
 
@@ -359,9 +359,9 @@ namespace mini {
 
         bool has_init = false;
 
-        LetNode() : CommandNode(AST::Type_t::LET), expr(NULL), ref(NULL) {}
+        LetNode() : CommandNode(AST::Type_t::LET), expr(nullptr), ref(nullptr) {}
         LetNode(const SymbolInfo& info, const pSymbol& symbol, const Ptr<TypeNode>& vtype, const Ptr<ExprNode>& expr) :
-            CommandNode(AST::Type_t::LET, info), symbol(symbol), vtype(vtype), expr(expr), ref(NULL) {}
+            CommandNode(AST::Type_t::LET, info), symbol(symbol), vtype(vtype), expr(expr), ref(nullptr) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -372,7 +372,7 @@ namespace mini {
         Ptr<ExprNode> lhs;
         Ptr<ExprNode> expr;
 
-        SetNode() : CommandNode(AST::Type_t::SET), lhs(NULL), expr(NULL) {}
+        SetNode() : CommandNode(AST::Type_t::SET), lhs(nullptr), expr(nullptr) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };
@@ -382,7 +382,7 @@ namespace mini {
     public:
         struct Case {
             Ptr<ExprNode> condition;    // VarNode/ConstantNode/TupleNode
-            Ptr<ExprNode> guard = NULL; //
+            Ptr<ExprNode> guard = nullptr; //
             Ptr<ExprNode> expr;         // Cannot be Null
         };
 
@@ -413,10 +413,10 @@ namespace mini {
         std::vector<std::pair<Ptr<LetNode>, ClassMemberMeta>> members;
         Ptr<LambdaNode> constructor;
 
-        TypedefRef ref = NULL;
-        VariableRef constructor_ref = NULL;
+        TypedefRef ref = nullptr;
+        VariableRef constructor_ref = nullptr;
 
-        ClassNode() : CommandNode(AST::CLASS), base(NULL), constructor(NULL) {}
+        ClassNode() : CommandNode(AST::CLASS), base(nullptr), constructor(nullptr) {}
 
         void print(OutputStream& os, unsigned indent)const;
     };

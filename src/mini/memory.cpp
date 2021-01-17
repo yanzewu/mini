@@ -22,6 +22,9 @@ Address MemorySection::allocate(MemoryObject::Type_t objtype, Size_t dyn_size) {
         break;
     }
     p->set_dataptr(malloc(dyn_size), dyn_size); // may be replaced by custom allocator
+    if (objtype == MemoryObject::Type_t::CLASS) {
+        memset(p->data, 0, dyn_size);
+    }
 
     table[addr] = p;
 

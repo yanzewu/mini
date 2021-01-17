@@ -191,7 +191,7 @@ namespace mini {
             class_stack.pop_back();
         }
 
-        IRProgram* irprog = NULL;
+        IRProgram* irprog = nullptr;
         std::vector<Size_t> function_stack;     // stack of currently processed function id
         std::vector<Size_t> class_stack;        // stack of currently processed class id
         std::vector<Size_t> filename_indices;   // address of filename in constant pool, keyed by id

@@ -37,7 +37,7 @@ Lambda captures local variable | Yes |
 Currying and partial evaluation | No | Requires lazy eval, or special 'bind' function
 Lazy evaluation | No |
 Lazy evaluation by default | No | Requires currying and nonsequential execution
-Pattern matching by structured binding | 0.5 | 
+Pattern matching by structured binding | Yes | 
 Variable assignment | Yes | Requires sequential execution
 Class member assignment | Yes | Requires sequential eval and (lvalue or overload). May achieved via function
 Call by sharing | Yes | Requires no deep copy
@@ -58,14 +58,15 @@ Duck type | Yes | struct
 Static type inference | Yes | But maybe more dynamical in the future
 Reference type | No |
 Generic functions | Yes |
-Generic classes | 0.6 |
+Generic classes | 0.5 |
 Type constraint | Yes |
-Existential types | TBD |
+Existential types | No |
 Full universal types | Yes | 
+Full system F-omega | 0.5 |
 Recursive types | 0.6 |
 Multual recursive types | 0.6 |
 Automatic type deduction | No |
-Runtime type info (RTTI) | 0.5 | typeof() returns the corresponding type
+Runtime type info (RTTI) | No | typeof() returns the corresponding type
 
 ### Object System
 
@@ -88,7 +89,7 @@ Interfaces | Yes |
 
 Name | Availablity | Notes
 --- | --- | ---
-Pattern matching | 0.4,0.5 |
+Pattern matching | Yes,0.5 |
 Short-circuit if/else | No | Redundant if pattern matching is supported
 Loop/fixed combinator | Yes,0.7 | Provided as function; tail recursion optimization
 Continuation/Coroutine | No | Should be covered by lambdas

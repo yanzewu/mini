@@ -113,10 +113,19 @@ namespace mini {
         MemorySection() {}
 
         MemoryObject* fetch(Address addr) {
-            return table.at(addr);
+            return const_cast<MemoryObject*>(const_cast<const MemorySection*>(this)->fetch(addr));
         }
         const MemoryObject* fetch(Address addr)const {
-            return table.at(addr);
+            if (addr == 0) {
+                throw RuntimeError("The memory address is null");
+            }
+            auto t = table.find(addr);
+            if (t == table.end()) {
+                throw RuntimeError("Invalid address: " + std::to_string(addr));
+            }
+            else {
+                return t->second;
+            }
         }
 
         Address allocate(MemoryObject::Type_t objtype, Size_t dyn_size);
@@ -129,6 +138,7 @@ namespace mini {
                 delete t.second;
             }
         }
+
     };
 
 }

@@ -1,7 +1,7 @@
 
 # Mini: Language Specification
 
-v0.3
+v0.4
 
 ## 1. Overview
 
@@ -31,16 +31,15 @@ The name of module is the filename without suffix. Relative import from subdirec
 The default search path is the current directory and installation path. A system library `sys` is provided for basic functions.
 
 
-## 2. Basic Types
+## 2. Type System
 
-### 2.1 Overview
+### 2.1 Intrinsic Types
 
 Intrinsic type deriving graph:
 
     top
       +---- (atom)
-      |       +---- nil
-      |       +---- bool
+      |       +---- (nil)
       |       +---- char
       |       +---- int
       |       +---- float
@@ -51,60 +50,39 @@ Intrinsic type deriving graph:
               +---- function(T1, T2, ..., Tret)
               +---- {f1=T1, f2=T2, ...}
               +---- object
-                    +--- all custom classes
+                    +--- all object types
                         +--- bottom
 
 All the atomic types cannot be inherited.
-
-Each type (include `list`) corresponds to a literal.
-
-- nil: `nil`, `()`
-- bool: `true`/`false`
-- int: integers
-- float: float numbers
-- char: `'a' 'b'`...
-- tuple: `(a, b, ...)`
-- function: closure
-- array: `[a, b, ...]`
-- struct: `{x=a, y=b, ...}`
-
-String literal is mapped to `array(char)`. To declare a integral float number, use format like "1.0".
-
-### 2.2 Individual Types
 
 #### top
 
 Top is the root type, which is not intended to be used directly.
 
-#### atom
+#### atom, nil and list
 
-Instance of atomic cannot be created. It remains conceptual.
-
-#### nil
-
-The empty type `nil` is for empty container and function returns.
-
-#### list
-
-`list` is not a generic type -- it has no type argument. It mainly serves as a type hack and future compatibility with Lisp.
+They mainly serves as a type hack and future compatibility with Lisp.
 
 #### array
 
-`array` is a generic type. It takes one type argument and hold objects with same type. So `array(int)` and `array(char)` are different types.
+`array` takes one type argument and hold objects with same type. When defining an array literal, the type will be lifted to the maximum type of arguments (but will fail when the types are not comparable).
+
+    let arr = [1,2,3];  // array(Int)
+    let arr2 = [new Base(), new Derived()];  // array(Base)
 
 #### tuple
 
 `tuple` behaves like product type. It needs at least one argument:
 
-    let a:tuple(int, int) = (1, 2);
+    let a:tuple(Int, Int) = (1, 2);
 
 #### struct
 
 `struct` is the recording type, which cannot be defined directly. They can be created as instances:
 
-    {a=1, b=2.0, c='3'}     // {a=int, b=float, c=char}
+    {a=1, b=2.0, c='3'}     // {a=Int, b=Float, c=Char}
 
-Named struct can be created through interfaces.
+Named struct can be created through interfaces. See Section 6.1 for details.
 
 #### function
 
@@ -118,6 +96,24 @@ which represents a function accepting argument with type `T1`, ... , `Tn` by ord
 
 `bottom` is the child type of any types, and is reserved for error handling and compiling (such as the returning value of `throw`).
 
+### 2.2 Constants
+
+There are five types of constants: booleans, integers, floats, charaters and strings. By default, they are all automatically boxed as object types: `Bool`, `Int`, `Float`, `Char` and `String`. `Int`, `Float`, `Char` and `String` are not boxed in the following two cases:
+
+(1) The let/set binding with type annotation:
+
+    let a = 2;  // a has type Int
+    let b:int = 2;  // b has type int
+    let c = b;      // c also has type int
+
+(2) As an argument of function call, where the function accepts the unboxed type:
+
+    let f = \x:int->@addi(x, 1);
+    f(2);   // gives int(3)
+    let g = \x:Int->add(x, 1);
+    g(2);   // gives Int(3)
+
+Non-constant expressions with unboxed types will not be automatically boxed in any cases. Since any unboxed atomic types do not implement `Addressable`, they cannot be used to instanitiate generic types.
 
 ## 3. Variable System
 
@@ -129,13 +125,11 @@ The syntax of variable definition is
 
 The name of variable should not begin with 0-9 and reserved operators (like "()", "<>", "=") and must not coincide with reserved keywords. Variables starting with "@" will be treated as system symbols and thus also not allowed for declaration. It is strongly recommended to use letter at the beginning of variable and letter/number inside variable.
 
-The `initialize-expr` is optional, and should yield an instance with the declared type or its child type. The new variable will have the declared type.
+`initialize-expr` must be present in local assignment but is optional for global variables. Uninitialized Addressables will have value `null`, whose value is not specified but is guaranteed to throw an error when being deferenced. Value of uninitialized atomic variables is unspecified. 
 
-If the declared type is missing, then the `initialize-expr` cannot be omitted, and the variable will have the same type of the expression.
+The type annotation is optional, but must be present if `initialize-expr` is missing. A variable will have its declared type.
 
-The value of uninitialized variable is unspecified. The variable to be declared must not appear in the initialization expression. However, a variable with same name may be used if it is declared in the outer scope, and the newly declared variable will shadow the previous variable.
-
-If a variable is defined globally, it will have a global scope and can be used in any functions. If a variable is defined inside function, its access is limited in that function. A variable cannot be defined twice within the same scope.
+If a variable is defined globally, it will have a global scope and can be used in any functions. If a variable is defined inside function, its access is limited in that function. A variable cannot be defined twice within the same scope, however a variable with same name may be used if it is declared in the outer scope, and the newly declared variable will shadow the previous variable.
 
 Examples:
 
@@ -164,7 +158,7 @@ More examples:
     set a = add(a,2);   # a = 3
     set a = '1';        # Error: Type not match (int != str)
 
-    interface Foo {a:int, b:int};
+    interface Foo {a:Int, b:Int};
     let foo1:Foo = {a=1, b=2};  # foo1 {a=1, b=2}
     set foo1.a = 2;             # foo1 {a=2, b=2}
 
@@ -233,8 +227,8 @@ The statement above is equivalent to
 
 Define gaussian:
 
-    def gaussian(x:float)->float {
-        let y:float = multiply(x, x), 
+    def gaussian(x:Float)->Float {
+        let y:Float = mul(x, x), 
         exp(negative(y))
     };
 
@@ -278,8 +272,8 @@ Keyword `self` will be available inside the constructor function. The result of 
 Example of constructors:
 
     class Point {
-        x:int, y:int, get_r2:function(int),
-        new(x:int, y:int)->{
+        x:Int, y:Int, get_r2:function(int),
+        new(x:Int, y:Int)->{
             set self.x = x,
             set self.y = y,
             set self.get_r2 = \()->add(mul(self.x, self.x), mul(self.y, self.y))
@@ -306,6 +300,8 @@ Constructors are allowed to be recursive, i.e. constructor of the class can be r
             set self.equals = \rhs:Bool->new Bool(@eqi(self.val, rhs.val))
         }
     }
+
+Uninitialized class members will have value `null`.
 
 ### 5.3 Inheritances
 
@@ -373,7 +369,6 @@ Different interfaces are same and can be used alternatively if they have the sam
     interface IFooable2 {foo:int};
     let foo2:IFooable2 = foo;
 
-Interface cannot be recursive.
 
 ### 6.2 Inheritance
 
@@ -463,24 +458,148 @@ To avoid ambiguity, we do not allow nested definition of universal type, i.e. no
     let f = \<T1,T2>.(x:T1, y:T2)->g<T2>(y);   # de-currying
     let f2 = \<T2>(y:T2)->f<int,T2>(2, y);      # currying
 
-When a universal function is applied to actual parameters, all universal quantifiers must be instantiated:
+Note the difference of a univesal type and a normal type with universal arguments:
 
-    id<Int>({a=2}); # gives {a=2}
-    id({a=2});      # ERROR: parameter need to be instanitiated
-
- However, this is not necessary for type parameters, since the universal quantifiers are not for function itself:
-
+    id({a=2}); # gives {a=2}:
     let id_pair =
-        \(f:forall<x>.function(x,x), a:int, b:char)->(f<Int>(a), f<Char>(b));
+        \(f:forall<x>.function(x,x), a:Int, b:Char)->(f<Int>(a), f<Char>(b));
     id_pair(id, 2, 'a');        # gives (2, 'a')
     id_pair(id<Int>, 2, 'a');   # Error: type does not match: forall<x>.function(x,x) != function(int,int)
 
+Normally, Mini requrires to provide the full type arguments when applying a universal function. However, when all the type arguments appears to be the type of function arguments, the type arguments can be inferred:
 
-## 8. Predefined Types and Variables
+    let f:forall<X>,function(X, X, X);
+    f(1, 2);    // Valid. f is inferred as f<Int>
+    f(1, '2');  // Error: cannot find a maximum type between 'Int' and 'Char'
+
+    let g:forall<X>.function(array(X), X);
+    g([1]);     // Error: cannot infer type arguments $1 for 'forall<X>.function(array(X),X)'
+    g<Int>([1]);    // Valid.
+
+
+
+## 8. Controls
+
+### 8.1 Case Expression
+
+The general syntax for match is:
+
+    case [EXPRESSION] {
+        [PATTERN1] (when [COND1]) -> [EXPR1],
+        [PATTERN2] (when [COND2]) -> [EXPR2],
+        ...
+    };
+
+The semantics of the match expression above is equivalent to
+
+    sel(sand(EXPRESSION.equals(PATTERN1), COND1)(), 
+        \->EXPR1,
+        \->sel(sand(EXPRESSION.equals(PATTERN2), COND2)(),
+            \->EXPR2,
+            \->...
+    ));
+
+There are three patterns in the case expressions:
+
+(1) Constant/variable pattern:
+
+    let fact = \x:Int->{
+        case x {
+            0 -> 1,
+            1 -> 1,
+            _ -> mul(x, fact(sub(x, 1)))
+        }
+    };
+
+    def detect1(x:Int)->nil {
+        case(x){
+            1 -> print("found 1"),
+            v -> print(format("not 1, but %d", [v]))
+        }
+    }
+
+Variable pattern without guards must be the last pattern.
+
+(2) Tuple structural binding pattern:
+
+    case (x, y) {
+        (0, 0) -> print("both are 0"),
+        (0, y) -> print("first is 0"),
+        (x, 0) -> print("second is 0),
+        (x, y) -> print("both are not 0")
+    };
+
+(3) Field structural binding pattern:
+
+    interface IFoo {a:int, b:char};
+
+    \x:IFoo -> case x {
+        {a=1, b=b} -> printf("a is 1, b is %c", [b]),
+        {a=a} when gt(a, 1) -> print("a > 1"),
+        _ -> print("a < 1")
+    };
+
+The compilation will fail if no such field exists in the corresponding type.
+
+Patterns can have guards:
+
+    let max = \t:tuple(Int, Int) -> case(t) {
+        (x, y) when lt(x, y) -> y,
+        _ -> x
+    };
+
+
+In all cases, an error will be raised if match fails all the patterns.
+
+### 8.2 Control Functions
+
+The match expessions is able to handle most cases requiring control flow. In addition, as a simulation of imperative languages, Mini provides control functions (See Section 9.2 for a full list of functions):
+
+    sel:   forall<X>.function(Bool, X, X, X);
+    fix:   forall<X>.function(function(function(X,X), function(X,X)), function(X,X))
+    until: forall<X>.function(function(X,Bool), function(X,X), function(X,X));
+
+`sel` selects one variable depends on condition:
+
+    sel(True, \()->print("true"), \()->print("false"))();   # prints "true"
+
+`fix` is the fixed-point combinator:
+
+    let fix = \<X>(f:function(function(X,X), function(X,X)))->
+        \x:X -> f(fix<X>(f))(x);
+
+Factorial using fix:
+
+    let fct = \(r:function(Int,Int))->{
+        \n:Int -> match(n) {
+            0 -> 1,
+            1 -> 1,
+            n -> mul(n, r(sub(n, 1)))
+        }
+    };
+    let fact:function(Int, Int) = fix<Int>(fct);
+    fact(5);        # gives 120
+
+`until` finds the first value that meets requirement:
+
+    let until = \<X>(p:function(X,Bool), f:function(X,X)) -> 
+        \cur_val:X->
+            sel<function(X)>(
+                p(cur_val),
+                \()->cur_val,
+                \()->until<X>(p, f)(f(cur_val))
+            )();
+
+Find the minimum power of 2 larger than 100:
+
+    until<Int>(\x:Int->ge<Int>(x, 100), \x:Int->mul<Int>(x, 2))(1);     # gives 128
+
+
+## 9. Predefined Types and Variables
 
 The predefined types and variables are available in module `std`.
 
-### 8.1 Low-level Functions
+### 9.1 Low-level Functions
 
 Functions that operates directly on primitive types. These functions either cannot be expressed by other functions, or is much slower without native implmentation. All the names of functions start with '@'.
 
@@ -541,7 +660,7 @@ Function | Type | Note
 @write | `function(int,array(char),int)` | Write string to file descriptor #0
 @format | `function(array(char), array(Addressable), array(char))`
 
-### 9.2 Extended Functions
+### 9.2 Extended Functions Defined in Standard Library
 
 Arithemetic and basic functional programming:
 
@@ -557,7 +676,7 @@ snd | `forall<X,Y>.function(tuple(X,Y),Y)` | second tuple member
 curry | `forall<X,Y,Z>.function(function(X,Y,Z),` `function(X,function(Y,Z)))`
 uncurry | `forall<X,Y,Z>.function(function(X,function(Y,Z)),` `function(X,Y,Z))`
 until | `forall<X>.function(function(X,Bool),function(X,X),` `function(X,X))` | continuously apply function until cond(a) is true
-error | `function(array(char),bottom)` | same as @error
+error | `function(String,bottom)` | same as @error
 undefined | `function(bottom)` | @error("undefined")
 fix | `forall<X>.function(function(X,X),function(X,X))` | fixed-point combinator
 sel | `forall<X>.function(Bool,X,X)` | selects first or second, depends on parameter
@@ -568,5 +687,6 @@ Arrays and lists:
 
 Function | Type | Usage
 --- | --- | ---
-aget | `forall<X>.function(array(X),int,X)`
-aset | `forall<X>.function(array(X),int,X,array(X))`
+aget | `forall<X>.function(array(X),Int,X)`
+aset | `forall<X>.function(array(X),Int,X,array(X))`
+

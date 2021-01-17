@@ -10,7 +10,7 @@ using namespace mini;
 void test_typing() {
 
     SymbolTable symtable;
-    symtable.initialize(NULL);
+    symtable.initialize(nullptr);
     BuiltinSymbolGenerator::generate_builtin_types(symtable);
 
     using tb = PrimitiveTypeBuilder;

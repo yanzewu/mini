@@ -200,6 +200,7 @@ namespace mini {
         std::unordered_map<uint64_t, FieldLocation> field_indices;
         std::unordered_map<int, std::fstream> file_descriptors;
         int current_fd = 3;
+        int null_value = 0;
     };
 
 }

@@ -4,6 +4,67 @@
 
 using namespace mini;
 
+void Attributor::process(const std::vector<pAST>& nodes, SymbolTable& sym_table, ErrorManager* error_manager) {
+    this->symbol_table = &sym_table;
+
+    for (const auto& node : nodes) {
+        try {
+            process_node(node);
+        }
+        catch (const ParsingError& e) {
+            if (error_manager && !error_manager->has_enough_errors()) {
+                error_manager->count_and_print_error(e);
+                while (symbol_table->cur_scope() != 0) {
+                    symbol_table->pop_scope();
+                }
+                binding_cache.clear();
+            }
+            else {
+                throw;
+            }
+        }
+    }
+    this->symbol_table = nullptr;
+}
+
+void Attributor::process_node(const pAST& node) {
+    if (node->is_expr()) {
+        process_expr(std::static_pointer_cast<ExprNode>(node));
+    }
+    else if (node->get_type() == AST::LET) {
+        process_let(ast_cast<LetNode>(node));
+    }
+    else if (node->get_type() == AST::SET) {
+        process_set(ast_cast<SetNode>(node));
+    }
+    else if (node->get_type() == AST::INTERFACE) {
+        process_interface(ast_cast<InterfaceNode>(node));
+    }
+    else if (node->get_type() == AST::CLASS) {
+        process_class(ast_cast<ClassNode>(node));
+    }
+    else {
+        throw std::runtime_error("Incorrect AST type");
+    }
+}
+
+// Process a single statement inside lambda.
+
+void Attributor::process_statement(const pAST& node) {
+    if (node->is_expr()) {
+        process_expr(std::static_pointer_cast<ExprNode>(node));
+    }
+    else if (node->get_type() == AST::LET) {
+        process_let(ast_cast<LetNode>(node));
+    }
+    else if (node->get_type() == AST::SET) {
+        process_set(ast_cast<SetNode>(node));
+    }
+    else {
+        throw std::runtime_error("Incorrect AST type");
+    }
+}
+
 // turn a constant to a boxed one.
 Ptr<ExprNode> Attributor::make_boxed_constant_node(const Ptr<ConstantNode>& node) {
     auto m = std::make_shared<FunCallNode>();
@@ -47,6 +108,85 @@ Ptr<ExprNode> Attributor::make_boxed_constant_node(const Ptr<ConstantNode>& node
     default: node->get_info().throw_exception("Unrecognized constant");
     }
     return m;
+}
+
+void Attributor::process_tuple(TupleNode* m_node) {
+
+    if (m_node->children.size() == 0) {
+        m_node->get_info().throw_exception("Tuple cannot be empty");
+    }
+
+    std::vector<Ptr<Type>> type_args;
+    for (auto& c : m_node->children) {
+        process_expr(c);
+        type_args.push_back(c->prog_type);
+    }
+    m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("tuple"), type_args);
+}
+
+void Attributor::process_struct(StructNode* m_node) {
+
+    std::unordered_map<std::string, pType> fields;
+
+    for (auto& c : m_node->children) {
+        process_expr(c.second);
+        auto r = fields.insert({ c.first->name, c.second->get_prog_type() });
+        if (!r.second) {
+            c.first->get_info().throw_exception("Field redefinition: " + c.first->get_name());
+        }
+
+    }
+    if (m_node->children.size() == 0) {
+        m_node->prog_type = std::make_shared<StructType>();
+    }
+    else {
+        m_node->prog_type = std::make_shared<StructType>(fields);
+    }
+}
+
+void Attributor::process_array(ArrayNode* m_node) {
+
+    pType maximum_type;
+
+    if (m_node->children.empty()) {
+        maximum_type = std::make_shared<PrimitiveType>(symbol_table->find_type("bottom"));
+    }
+    else {  // type inference
+        process_expr(m_node->children[0]);
+        maximum_type = m_node->children[0]->prog_type;
+
+        for (size_t i = 1; i < m_node->children.size(); i++) {
+            process_expr(m_node->children[i]);
+            make_maximum_type(maximum_type, m_node->children[i]->prog_type, m_node->get_info());
+        }
+    }
+    m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("array"), std::vector<pType>({ maximum_type }));
+}
+
+void Attributor::process_getfield(GetFieldNode* m_node) {
+    process_expr(m_node->lhs);
+    auto lhs_type = const_cast<ConstTypeRef>(m_node->lhs->get_prog_type().get());
+    const std::unordered_map<std::string, pType>* fields = nullptr;
+
+    while (lhs_type->is_universal_variable() && lhs_type->as<UniversalTypeVariable>()->quantifier) {
+        lhs_type = lhs_type->as<UniversalTypeVariable>()->quantifier;
+    }
+
+    if (lhs_type->is_struct()) {
+        fields = &(lhs_type->as<StructType>()->fields);
+    }
+    else if (lhs_type->is_object()) {
+        fields = &(lhs_type->as<ObjectType>()->ref->fields);
+    }
+    else {
+        m_node->lhs->get_info().throw_exception("Struct/class required");
+    }
+
+    auto f = fields->find(m_node->field->get_name());
+    if (f == fields->end()) {
+        m_node->field->get_info().throw_exception(StringAssembler("Type '")(*lhs_type)("' does not have field '")(m_node->field->get_name())("'")());
+    }
+    m_node->set_prog_type(f->second);
 }
 
 // let lhs = rhs;
@@ -101,7 +241,7 @@ Ptr<LambdaNode> Attributor::process_case_branch(const CaseNode::Case& m_case, co
 
     auto m_node = std::make_shared<LambdaNode>();
     m_node->set_info(condition_info);
-    Ptr<ExprNode> condition_expr = NULL;
+    Ptr<ExprNode> condition_expr = nullptr;
     Ptr<ExprNode> arg_var_node = std::make_shared<VarNode>(
         std::make_shared<Symbol>(arg_name->get_name(), m_case.condition->get_info())
         );  // This cannot be attributed, since it may be binded.
@@ -114,7 +254,6 @@ Ptr<LambdaNode> Attributor::process_case_branch(const CaseNode::Case& m_case, co
     }
     case AST::Type_t::CONSTANT: {   // lhs_var.eq(constant)
         condition_expr = make_equal_node(arg_var_node, m_case.condition);
-        // TODO NOTE I'm boxing every constant here. In the future such boxing will be default so should not be explicitly given here.
         break;
     }
     case AST::Type_t::TUPLE: {      // structure binding

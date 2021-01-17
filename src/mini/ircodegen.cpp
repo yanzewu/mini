@@ -74,7 +74,7 @@ void IRCodeGenerator::process_expr(const Ptr<ExprNode>& node, const std::string&
     case AST::TUPLE: process_tuple(node->as<TupleNode>()); break;
     case AST::STRUCT: process_struct(node->as<StructNode>()); break;
     case AST::FUNCALL: process_funcall(node->as<FunCallNode>()); break;
-    case AST::GETFIELD: process_getfield(node->as<GetFieldNode>(), NULL); break;
+    case AST::GETFIELD: process_getfield(node->as<GetFieldNode>(), nullptr); break;
     case AST::NEW: process_new(node->as<NewNode>()); break;
     case AST::CASE: process_expr(node->as<CaseNode>()->parsed_expr); break;
     case AST::TYPEAPPL: process_expr(node->as<TypeApplNode>()->lhs); break;
@@ -224,7 +224,6 @@ void IRCodeGenerator::process_let(const LetNode* node, bool create_field) {
     if (node->expr) {
         process_expr(node->expr, node->symbol->get_name());
     }
-    // TODO null
 
     switch (node->ref->source)
     {

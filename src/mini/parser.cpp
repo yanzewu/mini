@@ -87,7 +87,7 @@ Ptr<LetNode> mini::Parser::parse_let_wb(bool allow_auto) {
     m_node->symbol = get_id_inc();
     if (allow_auto && test_keyword_inc(Keyword::EQ)) {    // type inference
         m_node->expr = parse_expr();
-        m_node->vtype = NULL;
+        m_node->vtype = nullptr;
     }
     else {
         match_keyword_inc(Keyword::COLON);
@@ -436,7 +436,7 @@ Ptr<LetNode> mini::Parser::parse_func_def_wb() {
         m_typenode->args.push_back(m_funnode->ret_type);
     }
     else {
-        m_typenode->args.push_back(NULL);   // to be inferred
+        m_typenode->args.push_back(nullptr);   // to be inferred
     }
     m_node->vtype = m_typenode;
 
@@ -456,7 +456,7 @@ void mini::Parser::parse_quantifier_def_wb(std::vector<std::pair<pSymbol, Ptr<Ty
             arg_type = parse_type();
         }
         else {
-            arg_type = NULL;
+            arg_type = nullptr;
         }
         args.push_back({ arg_name, arg_type });
 

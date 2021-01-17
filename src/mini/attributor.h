@@ -14,67 +14,12 @@ namespace mini {
 
     public:
 
-        Attributor() {}
+        void process(const std::vector<pAST>& nodes, SymbolTable& sym_table, ErrorManager* error_manager = nullptr);
 
-        void process(const std::vector<pAST>& nodes, SymbolTable& sym_table, ErrorManager* error_manager=NULL) {
-            this->symbol_table = &sym_table;
-            
-            for (const auto& node : nodes) {
-                try {
-                    process_node(node);
-                }
-                catch (const ParsingError& e) {
-                    if (error_manager && !error_manager->has_enough_errors()) {
-                        error_manager->count_and_print_error(e);
-                        while (symbol_table->cur_scope() != 0) {
-                            symbol_table->pop_scope();
-                        }
-                        binding_cache.clear();
-                    }
-                    else {
-                        throw;
-                    }
-                }
-            }
-            this->symbol_table = nullptr;
-        }
-
-        void process_node(const pAST& node) {
-            if (node->is_expr()) {
-                process_expr(std::static_pointer_cast<ExprNode>(node));
-            }
-            else if (node->get_type() == AST::LET) {
-                process_let(ast_cast<LetNode>(node));
-            }
-            else if (node->get_type() == AST::SET) {
-                process_set(ast_cast<SetNode>(node));
-            }
-            else if (node->get_type() == AST::INTERFACE) {
-                process_interface(ast_cast<InterfaceNode>(node));
-            }
-            else if (node->get_type() == AST::CLASS) {
-                process_class(ast_cast<ClassNode>(node));
-            }
-            else {
-                throw std::runtime_error("Incorrect AST type");
-            }
-        }
+        void process_node(const pAST& node);
 
         // Process a single statement inside lambda.
-        void process_statement(const pAST& node) {
-            if (node->is_expr()) {
-                process_expr(std::static_pointer_cast<ExprNode>(node));
-            }
-            else if (node->get_type() == AST::LET) {
-                process_let(ast_cast<LetNode>(node));
-            }
-            else if (node->get_type() == AST::SET) {
-                process_set(ast_cast<SetNode>(node));
-            }
-            else {
-                throw std::runtime_error("Incorrect AST type");
-            }
-        }
+        void process_statement(const pAST& node);
 
         void process_type(const Ptr<TypeNode>& m_node) {
 
@@ -267,58 +212,11 @@ namespace mini {
             }
         }
 
-        void process_tuple(TupleNode* m_node) {
+        void process_tuple(TupleNode* m_node);
 
-            if (m_node->children.size() == 0) {
-                m_node->get_info().throw_exception("Tuple cannot be empty");
-            }
+        void process_struct(StructNode* m_node);
 
-            std::vector<Ptr<Type>> type_args;
-            for (auto& c : m_node->children) {
-                process_expr(c);
-                type_args.push_back(c->prog_type);
-            }
-            m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("tuple"), type_args);
-        }
-
-        void process_struct(StructNode* m_node) {
-
-            std::unordered_map<std::string, pType> fields;
-
-            for (auto& c : m_node->children) {
-                process_expr(c.second);
-                auto r = fields.insert({ c.first->name, c.second->get_prog_type() });
-                if (!r.second) {
-                    c.first->get_info().throw_exception("Field redefinition: " + c.first->get_name());
-                }
-
-            }
-            if (m_node->children.size() == 0) {
-                m_node->prog_type = std::make_shared<StructType>();
-            }
-            else {
-                m_node->prog_type = std::make_shared<StructType>(fields);
-            }
-        }
-
-        void process_array(ArrayNode* m_node) {
-
-            pType maximum_type;
-
-            if (m_node->children.empty()) {
-                maximum_type = std::make_shared<PrimitiveType>(symbol_table->find_type("bottom"));
-            }
-            else {  // type inference
-                process_expr(m_node->children[0]);
-                maximum_type = m_node->children[0]->prog_type;
-
-                for (size_t i = 1; i < m_node->children.size(); i++) {
-                    process_expr(m_node->children[i]);
-                    make_maximum_type(maximum_type, m_node->children[i]->prog_type, m_node->get_info());
-                }
-            }
-            m_node->prog_type = std::make_shared<PrimitiveType>(symbol_table->find_type("array"), std::vector<pType>({ maximum_type }));
-        }
+        void process_array(ArrayNode* m_node);
 
         void process_typeappl(TypeApplNode* m_node) {
             process_expr(m_node->lhs);
@@ -343,7 +241,7 @@ namespace mini {
             process_expr(m_node->caller);
             const auto& func_type_raw = m_node->caller->prog_type;
             const UniversalType* func_type_univ = nullptr;
-            const PrimitiveType* func_body = NULL;
+            const PrimitiveType* func_body = nullptr;
             pType func_type_applied;
 
             // Check types: universal/normal
@@ -449,34 +347,10 @@ namespace mini {
             }
         }
 
-        void process_getfield(GetFieldNode* m_node) {
-            process_expr(m_node->lhs);
-            auto lhs_type = const_cast<ConstTypeRef>(m_node->lhs->get_prog_type().get());
-            const std::unordered_map<std::string, pType>* fields = NULL;
-
-            while (lhs_type->is_universal_variable() && lhs_type->as<UniversalTypeVariable>()->quantifier) {
-                lhs_type = lhs_type->as<UniversalTypeVariable>()->quantifier;
-            }
-
-            if (lhs_type->is_struct()) {
-                fields = &(lhs_type->as<StructType>()->fields);
-            }
-            else if (lhs_type->is_object()) {
-                fields = &(lhs_type->as<ObjectType>()->ref->fields);
-            }
-            else {
-                m_node->lhs->get_info().throw_exception("Struct/class required");
-            }
-
-            auto f = fields->find(m_node->field->get_name());
-            if (f == fields->end()) {
-                m_node->field->get_info().throw_exception(StringAssembler("Type '")(*lhs_type)("' does not have field '")(m_node->field->get_name())("'")());
-            }
-            m_node->set_prog_type(f->second);
-        }
+        void process_getfield(GetFieldNode* m_node);
 
         // if self_reference is set, will set its type.
-        void process_lambda(LambdaNode* m_node, VariableRef self_reference=NULL) {
+        void process_lambda(LambdaNode* m_node, VariableRef self_reference=nullptr) {
 
             auto t = std::make_shared<UniversalType>();
             if (!m_node->quantifiers.empty()) process_quantifiers(m_node->quantifiers, t);
@@ -586,7 +460,6 @@ namespace mini {
                 for (auto m_case = m_node->cases.rbegin(); m_case != m_node->cases.rend(); m_case++) { 
                     // let current_case = m_case_branch [which uses previous_case];
 
-                    // TODO type inference so that branch_type is not necesssary
                     auto m_branch = process_case_branch(*m_case, arg_name, previous_branch_name, arg_type, m_case == m_node->cases.rbegin());
                     auto m_branch_name = std::make_shared<Symbol>("case#" + std::to_string(case_id--), m_node->get_info());
                     auto m_assignment = std::make_shared<LetNode>(m_case->condition->get_info(), m_branch_name, nullptr, m_branch);
@@ -638,7 +511,7 @@ namespace mini {
             }
 
             // usually we need an initialization; unless it's a system lib function
-            m_node->ref->has_assigned = (m_node->expr != NULL);
+            m_node->ref->has_assigned = (m_node->expr != nullptr);
         }
 
         void process_set(SetNode* m_node) {
@@ -671,7 +544,7 @@ namespace mini {
             else if (m_node->lhs->get_type() == AST::GETFIELD) {
                 auto lhs = ast_cast<GetFieldNode>(m_node->lhs);
                 process_getfield(lhs);
-                process_expr(m_node->expr);
+                process_expr(m_node->expr, lhs->prog_type);
                 match_type(lhs->prog_type, m_node->expr->prog_type, m_node->get_info());
             }
             else {
@@ -746,7 +619,7 @@ namespace mini {
                 ref->base = base_type;
             }
             else {
-                base_ref = NULL;
+                base_ref = nullptr;
                 ref->base = std::make_shared<PrimitiveType>(symbol_table->find_type("object"));
             }
 
@@ -802,7 +675,7 @@ namespace mini {
             ret_type_node->args.push_back(self_type_node);
             constructor_node->ret_type = ret_type_node;
             
-            m_node->constructor_ref = symbol_table->insert_constructor(m_node->symbol, ref, NULL);
+            m_node->constructor_ref = symbol_table->insert_constructor(m_node->symbol, ref, nullptr);
             process_lambda(constructor_node.get(), m_node->constructor_ref);    // Note this is recursive.
             m_node->constructor.swap(constructor_node);  // NOTE now the m_node->constructor is changed to the global one with signature A->((...)->A)
 
@@ -863,7 +736,7 @@ namespace mini {
 
     private:
 
-        SymbolTable* symbol_table;
+        SymbolTable* symbol_table = nullptr;
 
         std::vector<std::unordered_map<VariableRef, VariableRef>> binding_cache;   // cache of bindings that need to be recorded
         // This is the stack of binding cache; For each element, it is a dict {external_ref:binding_ref}

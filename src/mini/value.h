@@ -25,7 +25,7 @@ namespace mini {
         bool has_assigned = false;
 
         VarMetaData(const pSymbol& symbol, Index_t scope, Index_t index, Source source) :
-            symbol(symbol), scope(scope), index(index), source(source), prog_type(NULL) {
+            symbol(symbol), scope(scope), index(index), source(source), prog_type(nullptr) {
 
         }
 

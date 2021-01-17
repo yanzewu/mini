@@ -114,7 +114,7 @@ Type::Ordering PrimitiveType::greater(const Type* rhs)const {
 Type::Ordering PrimitiveType::less(const Type* rhs)const {
     if (!is_bottom()) throw std::runtime_error("bottom required");
     if (rhs->is_universal_variable()) {
-        return (rhs->as<UniversalTypeVariable>()->quantifier == NULL ||
+        return (!rhs->as<UniversalTypeVariable>()->quantifier ||
             rhs->as<UniversalTypeVariable>()->quantifier->is_kind0()) ?
             Ordering::LESS : Ordering::UNCOMPARABLE;
     }
@@ -130,6 +130,9 @@ bool StructType::is_interface_of(const Type* rhs) const {
         if (rrhs->is_struct() || rrhs->is_object()) {
             return is_interface_of(rrhs->unfold().get());
         }
+        return false;
+    }
+    else {
         return false;
     }
 }
